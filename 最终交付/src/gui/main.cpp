@@ -77,10 +77,14 @@ static bool create_formats(Gfx &g) {
     if (!mk(L"Segoe UI", 25.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD, &g.fHero)) return false;
     if (!mk(L"Segoe UI", 12.5f, DWRITE_FONT_WEIGHT_NORMAL, &g.fHeroSub)) return false;
     if (!mk(L"Segoe UI", 25.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD, &g.fStat)) return false;
-    if (!mk(L"Segoe MDL2 Assets", 17.0f, DWRITE_FONT_WEIGHT_NORMAL, &g.fIcon)) return false;
-    if (!mk(L"Segoe MDL2 Assets", 42.0f, DWRITE_FONT_WEIGHT_NORMAL, &g.fIconBig)) return false;
-    if (!mk(L"Segoe MDL2 Assets", 30.0f, DWRITE_FONT_WEIGHT_NORMAL, &g.fIconBrand)) return false;
-    if (!mk(L"Segoe MDL2 Assets", 96.0f, DWRITE_FONT_WEIGHT_NORMAL, &g.fIconHuge)) return false;
+    auto mk_icon = [&](float size, IDWriteTextFormat **out) -> bool {
+        if (mk(L"Segoe Fluent Icons", size, DWRITE_FONT_WEIGHT_NORMAL, out)) return true;
+        return mk(L"Segoe MDL2 Assets", size, DWRITE_FONT_WEIGHT_NORMAL, out);
+    };
+    if (!mk_icon(17.0f, &g.fIcon)) return false;
+    if (!mk_icon(42.0f, &g.fIconBig)) return false;
+    if (!mk_icon(30.0f, &g.fIconBrand)) return false;
+    if (!mk_icon(96.0f, &g.fIconHuge)) return false;
     if (!mk(L"Consolas", 11.0f, DWRITE_FONT_WEIGHT_NORMAL, &g.fMono)) return false;
 
     IDWriteInlineObject *sign = nullptr;
@@ -193,7 +197,7 @@ void update_backdrop(bool dark) {
     DwmSetWindowAttribute(g_app.hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
 
     /* 深色窗口的边框跟随主题，避免浅色 DWM 边框在暗色背景外露 */
-    COLORREF border = dark ? RGB(42, 46, 52) : RGB(226, 229, 235);
+    COLORREF border = dark ? RGB(48, 48, 48) : RGB(224, 224, 224);
     DwmSetWindowAttribute(g_app.hwnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
 
     /* Windows 11: Mica；Windows 10: Acrylic（未文档化，失败则静默回退） */
@@ -216,7 +220,7 @@ void update_backdrop(bool dark) {
         memset(&accent, 0, sizeof(accent));
         accent.AccentState = 4; /* ACCENT_ENABLE_ACRYLICBLURBEHIND */
         accent.AccentFlags = 2;
-        accent.GradientColor = dark ? 0xCC202124 : 0xCCF4F6F9;
+        accent.GradientColor = dark ? 0xCC1A1A1A : 0xCCF4F4F4;
         WCADATA data;
         data.Attrib = 19; /* WCA_ACCENT_POLICY */
         data.pvData = &accent;
@@ -444,6 +448,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             if (wp == VK_F5) {
                 scanner_refresh_driver();
+                scanner_refresh_hardware();
                 scanner_db_count();
                 InvalidateRect(hwnd, NULL, FALSE);
                 return 0;
@@ -551,7 +556,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
     UINT sdpi = system_dpi();
     float s = (float)sdpi / 96.0f;
     int w = (int)(1180.0f * s);
-    int h = (int)(640.0f * s);
+    int h = (int)(760.0f * s);
     w = std::min(w, waW - 16);
     h = std::min(h, waH - 16);
     int x = work.left + (waW - w) / 2;
@@ -586,16 +591,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
             LocalFree(argv);
         }
         if (!startupPage.empty()) {
-            if (startupPage == L"scan") g_app.page = Page::Scan;
-            else if (startupPage == L"protection") g_app.page = Page::Protection;
+            if (startupPage == L"overview" || startupPage == L"home") g_app.page = Page::Overview;
+            else if (startupPage == L"scan" || startupPage == L"protection") g_app.page = Page::Protection;
             else if (startupPage == L"quarantine") g_app.page = Page::Quarantine;
-            else if (startupPage == L"logs") g_app.page = Page::Logs;
-            else if (startupPage == L"driver") g_app.page = Page::Driver;
-            else if (startupPage == L"settings") g_app.page = Page::Settings;
+            else if (startupPage == L"logs" || startupPage == L"history") g_app.page = Page::History;
+            else if (startupPage == L"driver" || startupPage == L"settings") g_app.page = Page::Settings;
             g_app.start_page_anim();
         }
         if (!startupScan.empty()) {
-            g_app.page = Page::Scan;
+            g_app.page = Page::Protection;
             g_app.start_page_anim();
             scan_path_async(startupScan);
         }

@@ -1,36 +1,42 @@
-﻿扫描器最终交付
-================
+﻿扫描器夜间构建交付
+====================
 
-版本：1.0.0-dll-gui-20261024
-引擎：1.0.0-dll-20261023 (ABI 1)
-日期：2026-10-24
+版本：1.1.0-night-20261025
+引擎：1.1.0-dll-20261024 (ABI 1)
+日期：2026-10-25
 平台：Windows 10/11 x64
 
 内容：
-  bin\ScannerUI.exe      WD 风格 GUI（Win32 + Direct2D）
-  bin\scanner.dll        扫描引擎（C ABI，x64）
-  bin\scanner_test.exe   最小调用示例 / 自检
-  bin\sigdb_builder.exe  内置特征导出工具
+  bin\ScannerUI.exe      WD 风格极简 GUI（5 页、纯灰阶、DWM 圆角）
+  bin\scanner.dll        扫描引擎（C ABI，x64，含硬件检测导出）
+  bin\scanner_test.exe   最小调用示例 / 自检（旧构建保留）
+  bin\sigdb_builder.exe  内置特征导出工具（旧构建保留）
   bin\scaler.txt         模型标准化参数
   db\signatures.db       外部特征库（53 条）
-  sdk\scanner_api.h      C ABI 头文件
-  src\                   可重建源码快照（含 src\gui）
-  build\                 重建脚本（PS 5.1）
-  docs\                  交付说明/验证记录/边界说明
+  sdk\scanner_api.h      C ABI 头文件（含 ScannerHardwareInfo）
+  src\                   可重建源码快照（含 src\gui、src\hardware.c）
+  driver\                HIPS 内核执行端源码 / INF / 客户端 / 测试脚本
+  tests\vm\              VM 隔离测试脚本、只读 ISO 生成脚本
+  build\                 MSVC 重建脚本（PS 5.1）
+  docs\                  交付说明 / 验证记录 / 边界说明
 
-已验证：
-  · 666.exe -> [NORMAL] 0.24（与 CLI 一致）
-  · Phobos -> [HIGH RISK - SIGNATURE] 100，SHA256 已写入隔离索引
-  · notepad.exe -> [TRUSTED]
-  · scan_any.ps1 -> [SUSPICIOUS - SCRIPT] 55
-  · 文件夹递归、取消、隔离、恢复、日志、深浅色、设置持久化
-  · 外部 signatures.db 优先加载；GUI 可热重载
+本版变更：
+  · GUI 重写为 5 页极简布局，仅黑/白/灰，DWM 原生圆角；
+  · scanner.dll 新增 scanner_get_hardware_info（SGX / PT / TPM 2.0 / Hypervisor）；
+  · 隔离文件改为 QTN1 头 + XOR 0x5A，兼容旧明文 .qtn；
+  · 新增 HIPS 驱动源码、INF、SYSTEM-only 设备 ACL、强杀/强删 IOCTL；
+  · pe_vm.c 修复 JMP [IAT] 与 CALL [IAT] 的栈处理差异；
+  · 全部 C/C++ 使用 MSVC x64 构建。
+
+构建状态：
+  · scanner.dll / ScannerUI.exe / HipsDriver.sys / pe_vm_msvc.exe 编译通过；
+  · VM 运行验证见 tests\vm\README_VM_TESTS.txt（当前会话受 VM 锁屏阻塞）。
 
 说明：
   · 静态扫描绝不执行样本；pe_vm 在 DLL 模式强制关闭。
-  · 当前不含服务/实时监控/驱动；驱动签名与 WHQL 由使用方负责。
-  · 隔离文件按原文件保存，未加密；请放在受控目录。
-  · 当前为串行扫描；GUI 已用工作线程避免界面卡死。
-  · 未做 Authenticode 签名；正式分发前请签名。
+  · 隔离 XOR 只是轻量混淆，不是密码学加密。
+  · 驱动只允许在 VM + 测试签名 + 快照中加载，绝不在宿主机加载。
+  · 当前不含服务/实时监控；驱动是独立测试组件，GUI 不加载。
+  · 正式分发前请对 EXE/DLL/驱动做 Authenticode/WHQL 签名。
 
-文件校验：见 SHA256SUMS.txt。
+文件校验：见 SHA256SUMS.txt（构建后重新生成）。

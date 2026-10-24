@@ -1,0 +1,43 @@
+; HipsDriver.inf -- legacy (non-PnP) kernel service installer
+;
+; 安装（测试机、管理员）：
+;   rundll32 setupapi.dll,InstallHinfSection DefaultInstall 132 .\HipsDriver.inf
+; 或手动：
+;   copy /y HipsDriver.sys %SystemRoot%\System32\drivers\
+;   sc create HipsDriver type= kernel start= demand binPath= %SystemRoot%\System32\drivers\HipsDriver.sys
+;   sc start HipsDriver
+;
+; 生产分发必须用 WHQL/attestation 签名；本 INF 不引用 CatalogFile，
+; 仅供 VM 测试签名环境使用。
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGuid={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%Provider%
+DriverVer=10/24/2026,1.0.0.0
+
+[DestinationDirs]
+HipsDriver.CopyFiles=12
+
+[DefaultInstall.NT]
+CopyFiles=HipsDriver.CopyFiles
+
+[DefaultInstall.NT.Services]
+AddService=HipsDriver,0x00000000,HipsDriver.Service
+
+[HipsDriver.CopyFiles]
+HipsDriver.sys
+
+[HipsDriver.Service]
+DisplayName=%ServiceName%
+Description=%ServiceDesc%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\HipsDriver.sys
+
+[Strings]
+Provider="Opanda"
+ServiceName="Opanda HIPS Driver"
+ServiceDesc="Opanda HIPS kernel execution endpoint (SYSTEM-only device)"

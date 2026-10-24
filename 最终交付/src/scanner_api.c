@@ -7,12 +7,13 @@
 #include "scanner_api.h"
 #include "scan_output.h"
 #include "signature_scan.h"
+#include "hardware.h"
 
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
 
-#define SCANNER_VERSION_STRING "1.0.0-dll-20261023"
+#define SCANNER_VERSION_STRING "1.1.0-dll-20261024"
 
 /* 来自 scan_main.c */
 extern void scan_one_file(const char *path);
@@ -169,4 +170,8 @@ int scanner_reload_signature_db(void) {
     n = g_db_count;
     ReleaseSRWLockExclusive(&g_scan_lock);
     return n;
+}
+
+int scanner_get_hardware_info(ScannerHardwareInfo *out) {
+    return hardware_query(out);
 }

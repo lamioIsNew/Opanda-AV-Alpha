@@ -1,7 +1,7 @@
 ﻿# scanner.dll（C ABI）说明
 
-版本：`1.0.0-dll-20261023`  
-ABI：`1`  
+版本：`1.1.0-dll-20261024`  
+ABI：`1`（新增导出为附加 API，不改变既有结构布局）  
 平台：Windows 10/11 x64
 
 ## 1. 设计
@@ -23,6 +23,7 @@ int          scanner_scan_file_a(const char *path_ansi, ScannerResult *out);
 int          scanner_result_level(const ScannerResult *r);
 int          scanner_signature_db_count(void);
 int          scanner_reload_signature_db(void);
+int          scanner_get_hardware_info(ScannerHardwareInfo *out);  /* 1.1.0 新增 */
 ```
 
 返回码：
@@ -60,6 +61,22 @@ typedef struct ScannerResult {
 ```
 
 字符串一律 UTF-8，固定长度、以 `\0` 结尾。`sha` 在特征码命中、加壳、脚本/模型等路径会尽量填充；可信文件可能为空。
+
+### 3.1 ScannerHardwareInfo（1.1.0 新增）
+
+```c
+typedef struct ScannerHardwareInfo {
+    unsigned int sgx;           /* CPUID.(EAX=7,ECX=0):EBX[2]  */
+    unsigned int pt;            /* CPUID.(EAX=7,ECX=0):EBX[25] */
+    unsigned int tpm20;         /* TBS 报告 TPM 2.0 且可用     */
+    unsigned int tpm_version;   /* 0=未知 12=TPM 1.2 20=TPM 2.0 */
+    unsigned int tpm_interface; /* TPM_IFTYPE_*                 */
+    unsigned int hypervisor;    /* CPUID.(EAX=1):ECX[31]       */
+    char         detail[256];   /* UTF-8 说明（TPM/错误原因）   */
+} ScannerHardwareInfo;
+```
+
+`scanner_get_hardware_info()` 只读探测，不修改系统状态，不参与扫描判定。TPM 查询通过 `tbs.dll` 的 `Tbsi_GetDeviceInfo()`；查询失败时 `tpm20=0`，`detail` 给出 TBS 错误码。
 
 ## 4. 运行时文件查找
 
@@ -110,21 +127,15 @@ Phobos_Magic_S	1	100	Ransom.Win32.Phobos	125EA7F0
 
 ## 6. 构建
 
-在交付根目录：
+MSVC（当前支持路径）：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build\build_scanner_dll.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build\build_scanner_msvc.ps1
 ```
 
-脚本重建：
+重建 `bin\scanner.dll` 与 `bin\scaler.txt`。脚本使用 VS BuildTools 18 + Windows SDK 10.0.26100，链接 `tbs.lib`。构建前请关闭正在使用 DLL 的 GUI。
 
-- `bin\scanner.dll`
-- `bin\scanner_test.exe`
-- `bin\sigdb_builder.exe`
-- `db\signatures.db`
-- `bin\scaler.txt`
-
-编译器默认 `G:\mingw64\bin\gcc.exe`；找不到时回退 PATH 中的 `gcc`。构建前请关闭正在使用 DLL 的 GUI。
+旧的 MinGW 脚本 `build_scanner_dll.ps1` 仍保留作参考，但本机没有 g++ 时不要使用。
 
 ## 7. 已知限制（诚实版）
 
@@ -136,4 +147,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build\build_scanner_dll.ps
 6. 内置特征表保留作兜底；删除外部库条目时，内置表可能仍命中。
 7. 仅提供 x64 DLL；32 位需单独构建。
 8. 未做代码签名；正式交付前建议 Authenticode 签名。
-9. 未实现服务化、实时文件监控、进程保护与驱动执行端。
+9. 未实现服务化、实时文件监控与进程保护；驱动执行端是独立的 `driver/` 测试组件，不在 DLL 内。

@@ -1,12 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
+#ifdef _MSC_VER
+#  define strcasecmp _stricmp
+#  define strncasecmp _strnicmp
+#else
+#  include <strings.h>
+#endif
 #include <math.h>
 #include <windows.h>
 #include <commdlg.h>
 #include <shlobj.h>
-#include <dirent.h>
 #include <time.h>
 
 #include "feature_extractor.h"

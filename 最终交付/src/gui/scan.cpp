@@ -23,6 +23,7 @@ typedef const char *(__cdecl *PFN_VERSION)(void);
 typedef unsigned int (__cdecl *PFN_ABI)(void);
 typedef int (__cdecl *PFN_DBCOUNT)(void);
 typedef int (__cdecl *PFN_RELOAD)(void);
+typedef int (__cdecl *PFN_HWINFO)(ScannerHardwareInfo *);
 
 static HMODULE g_dll = nullptr;
 static PFN_SCAN_W p_scan_w = nullptr;
@@ -31,6 +32,7 @@ static PFN_VERSION p_version = nullptr;
 static PFN_ABI p_abi = nullptr;
 static PFN_DBCOUNT p_dbcount = nullptr;
 static PFN_RELOAD p_reload = nullptr;
+static PFN_HWINFO p_hwinfo = nullptr;
 
 /* ---------------- 基础工具 ---------------- */
 static std::wstring exe_dir() {
@@ -284,6 +286,7 @@ bool scanner_runtime_init() {
     p_abi = (PFN_ABI)GetProcAddress(g_dll, "scanner_abi_version");
     p_dbcount = (PFN_DBCOUNT)GetProcAddress(g_dll, "scanner_signature_db_count");
     p_reload = (PFN_RELOAD)GetProcAddress(g_dll, "scanner_reload_signature_db");
+    p_hwinfo = (PFN_HWINFO)GetProcAddress(g_dll, "scanner_get_hardware_info");
 
     if (!p_scan_w || !p_level) {
         MessageBoxW(NULL, L"scanner.dll 缺少导出函数（scanner_scan_file_w / scanner_result_level）。",
@@ -302,6 +305,7 @@ bool scanner_runtime_init() {
     if (p_version) g_app.engineVersion = u2w(std::string(p_version()));
     g_app.engineReady = true;
     scanner_db_count();
+    scanner_refresh_hardware();
     return true;
 }
 
@@ -324,6 +328,7 @@ void scanner_runtime_shutdown() {
     p_abi = nullptr;
     p_dbcount = nullptr;
     p_reload = nullptr;
+    p_hwinfo = nullptr;
     g_app.engineReady = false;
 }
 
@@ -339,6 +344,42 @@ int scanner_db_reload() {
     g_app.dbPath = scanner_db_display_path();
     g_app.show_toast(L"特征库已重新加载：" + std::to_wstring(g_app.dbCount) + L" 条");
     return g_app.dbCount;
+}
+
+void scanner_refresh_hardware() {
+    memset(&g_app.hw, 0, sizeof(g_app.hw));
+    g_app.hwReady = false;
+    if (p_hwinfo && p_hwinfo(&g_app.hw) == 0) {
+        g_app.hwReady = true;
+    } else {
+        strncpy_s(g_app.hw.detail, sizeof(g_app.hw.detail),
+                  "scanner.dll 未导出 hardware 查询，或查询失败", _TRUNCATE);
+    }
+    g_app.hwQueriedAt = GetTickCount64();
+}
+
+void scanner_clear_results() {
+    if (g_app.scanning.load()) {
+        g_app.show_toast(L"扫描进行中，先停止再清空");
+        return;
+    }
+    g_app.results.clear();
+    g_app.pending.clear();
+    g_app.selectedResult = -1;
+    g_app.scrollScan = 0.0f;
+    g_app.stats = ScanStats();
+    g_app.currentFile.clear();
+    g_app.scanPath.clear();
+    g_app.scanRootLabel.clear();
+    g_app.scanFinished = false;
+    g_app.scanCanceled = false;
+    g_app.show_toast(L"结果列表已清空");
+}
+
+void open_log_dir() {
+    std::wstring d = join_path(scanner_data_dir(), L"logs");
+    ensure_dir(d);
+    ShellExecuteW(NULL, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL);
 }
 
 /* ---------------- 历史 ---------------- */
@@ -429,6 +470,197 @@ void scanner_save_quarantine() {
     write_utf8(quarantine_index(), out, false);
 }
 
+/* ---------------- 隔离区 QTN1 轻量加密（任务 5） ----------------
+ * 格式（32 字节头，全部小端）：
+ *   0..3   "QTN1"
+ *   4..7   version = 1
+ *   8..11  flags   = 1 (XOR 0x5A)
+ *   12..19 original_size (uint64)
+ *   20..31 reserved (0)
+ * 载荷：原始文件逐字节 XOR 0x5A。
+ *
+ * 注意：这是隔离存储的轻量混淆，不是密码学加密；目的是避免 .qtn
+ * 被普通文本/十六进制工具直接读出，不能替代 BitLocker/EFS。
+ */
+static const unsigned char kQtnMagic[4] = {'Q', 'T', 'N', '1'};
+static const unsigned char kQtnKey = 0x5A;
+static const DWORD kQtnHeader = 32;
+
+static bool qtn_read_exact(HANDLE h, void *buf, DWORD n) {
+    unsigned char *p = (unsigned char *)buf;
+    while (n) {
+        DWORD got = 0;
+        if (!ReadFile(h, p, n, &got, NULL) || got == 0) return false;
+        p += got;
+        n -= got;
+    }
+    return true;
+}
+
+static bool qtn_write_exact(HANDLE h, const void *buf, DWORD n) {
+    const unsigned char *p = (const unsigned char *)buf;
+    while (n) {
+        DWORD put = 0;
+        if (!WriteFile(h, p, n, &put, NULL) || put == 0) return false;
+        p += put;
+        n -= put;
+    }
+    return true;
+}
+
+static bool qtn_is_encrypted(const std::wstring &path) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    unsigned char m[4] = {0};
+    DWORD got = 0;
+    BOOL ok = ReadFile(h, m, 4, &got, NULL);
+    CloseHandle(h);
+    return ok && got == 4 && memcmp(m, kQtnMagic, 4) == 0;
+}
+
+static bool qtn_encrypt_to(const std::wstring &src, const std::wstring &dst, std::wstring &err) {
+    HANDLE in = INVALID_HANDLE_VALUE, out = INVALID_HANDLE_VALUE;
+    LARGE_INTEGER li;
+    bool ok = false;
+    unsigned char hdr[kQtnHeader] = {0};
+    unsigned int ver = 1, flags = 1;
+    unsigned long long total = 0;
+
+    in = CreateFileW(src.c_str(), GENERIC_READ,
+                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                     NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (in == INVALID_HANDLE_VALUE) { err = error_text(GetLastError()); return false; }
+    if (!GetFileSizeEx(in, &li)) { err = error_text(GetLastError()); goto done; }
+    total = (unsigned long long)li.QuadPart;
+
+    out = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, NULL,
+                      CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (out == INVALID_HANDLE_VALUE) { err = error_text(GetLastError()); goto done; }
+
+    memcpy(hdr, kQtnMagic, 4);
+    memcpy(hdr + 4, &ver, 4);
+    memcpy(hdr + 8, &flags, 4);
+    memcpy(hdr + 12, &total, 8);
+    if (!qtn_write_exact(out, hdr, kQtnHeader)) { err = error_text(GetLastError()); goto done; }
+
+    {
+        std::vector<unsigned char> buf(64 * 1024);
+        unsigned long long left = total;
+        while (left) {
+            DWORD want = (DWORD)std::min<unsigned long long>(left, buf.size());
+            DWORD got = 0;
+            if (!ReadFile(in, buf.data(), want, &got, NULL) || got == 0) {
+                err = error_text(GetLastError());
+                goto done;
+            }
+            for (DWORD i = 0; i < got; i++) buf[i] ^= kQtnKey;
+            if (!qtn_write_exact(out, buf.data(), got)) { err = error_text(GetLastError()); goto done; }
+            left -= got;
+        }
+    }
+    FlushFileBuffers(out);
+    ok = true;
+
+done:
+    if (out != INVALID_HANDLE_VALUE) CloseHandle(out);
+    if (in != INVALID_HANDLE_VALUE) CloseHandle(in);
+    if (!ok) DeleteFileW(dst.c_str());
+    return ok;
+}
+
+static bool qtn_decrypt_to(const std::wstring &src, const std::wstring &dst, std::wstring &err) {
+    HANDLE in = INVALID_HANDLE_VALUE, out = INVALID_HANDLE_VALUE;
+    bool ok = false;
+    unsigned char hdr[kQtnHeader] = {0};
+    unsigned int ver = 0, flags = 0;
+    unsigned long long total = 0, written = 0;
+
+    in = CreateFileW(src.c_str(), GENERIC_READ,
+                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                     NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (in == INVALID_HANDLE_VALUE) { err = error_text(GetLastError()); return false; }
+    if (!qtn_read_exact(in, hdr, kQtnHeader)) { err = L"隔离文件头不完整"; goto done; }
+    if (memcmp(hdr, kQtnMagic, 4) != 0) { err = L"不是 QTN1 隔离文件"; goto done; }
+    memcpy(&ver, hdr + 4, 4);
+    memcpy(&flags, hdr + 8, 4);
+    memcpy(&total, hdr + 12, 8);
+    if (ver != 1) { err = L"不支持的隔离格式版本"; goto done; }
+    if (flags != 1) { err = L"不支持的隔离加密标志"; goto done; }
+
+    out = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, NULL,
+                      CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (out == INVALID_HANDLE_VALUE) { err = error_text(GetLastError()); goto done; }
+
+    {
+        std::vector<unsigned char> buf(64 * 1024);
+        while (written < total) {
+            DWORD want = (DWORD)std::min<unsigned long long>(total - written, buf.size());
+            DWORD got = 0;
+            if (!qtn_read_exact(in, buf.data(), want)) { err = L"隔离文件载荷被截断"; goto done; }
+            got = want;
+            for (DWORD i = 0; i < got; i++) buf[i] ^= kQtnKey;
+            if (!qtn_write_exact(out, buf.data(), got)) { err = error_text(GetLastError()); goto done; }
+            written += got;
+        }
+    }
+    FlushFileBuffers(out);
+    ok = true;
+
+done:
+    if (out != INVALID_HANDLE_VALUE) CloseHandle(out);
+    if (in != INVALID_HANDLE_VALUE) CloseHandle(in);
+    if (!ok) DeleteFileW(dst.c_str());
+    return ok;
+}
+
+static bool qtn_quarantine_file(const std::wstring &src, const std::wstring &stored, std::wstring &err) {
+    std::wstring tmp = stored + L".tmp";
+    DeleteFileW(tmp.c_str());
+    if (!qtn_encrypt_to(src, tmp, err)) return false;
+    if (!MoveFileExW(tmp.c_str(), stored.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        err = error_text(GetLastError());
+        DeleteFileW(tmp.c_str());
+        DeleteFileW(stored.c_str());
+        return false;
+    }
+    if (!DeleteFileW(src.c_str())) {
+        DWORD e = GetLastError();
+        if (e == ERROR_ACCESS_DENIED) {
+            SetFileAttributesW(src.c_str(), FILE_ATTRIBUTE_NORMAL);
+            if (DeleteFileW(src.c_str())) return true;
+            e = GetLastError();
+        }
+        err = error_text(e);
+        DeleteFileW(stored.c_str());
+        return false;
+    }
+    return true;
+}
+
+static bool qtn_restore_file(const std::wstring &stored, const std::wstring &original, std::wstring &err) {
+    if (!qtn_is_encrypted(stored)) {
+        if (!MoveFileExW(stored.c_str(), original.c_str(), MOVEFILE_COPY_ALLOWED)) {
+            err = error_text(GetLastError());
+            return false;
+        }
+        return true;
+    }
+    std::wstring tmp = original + L".qtn_restore";
+    DeleteFileW(tmp.c_str());
+    if (!qtn_decrypt_to(stored, tmp, err)) return false;
+    if (!MoveFileExW(tmp.c_str(), original.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        err = error_text(GetLastError());
+        DeleteFileW(tmp.c_str());
+        return false;
+    }
+    DeleteFileW(stored.c_str());
+    return true;
+}
+
 void scanner_quarantine_selected() {
     if (g_app.selectedResult < 0 || g_app.selectedResult >= (int)g_app.results.size()) {
         g_app.show_toast(L"请先在结果列表中选择一个文件");
@@ -457,9 +689,12 @@ void scanner_quarantine_selected() {
                                  : base.substr(0, dot) + suffix + base.substr(dot);
         stored = join_path(qdir, compact_time() + L"_" + named + L".qtn");
     }
-    if (!MoveFileExW(e.path.c_str(), stored.c_str(), MOVEFILE_COPY_ALLOWED)) {
-        g_app.show_toast(L"隔离失败：" + error_text(GetLastError()));
-        return;
+    {
+        std::wstring qerr;
+        if (!qtn_quarantine_file(e.path, stored, qerr)) {
+            g_app.show_toast(L"隔离失败：" + qerr);
+            return;
+        }
     }
     QuarantineEntry q;
     q.time = now_text();
@@ -494,9 +729,12 @@ void scanner_restore_selected() {
     }
     size_t p = q.original.find_last_of(L"\\/");
     if (p != std::wstring::npos) ensure_dir(q.original.substr(0, p));
-    if (!MoveFileExW(q.stored.c_str(), q.original.c_str(), MOVEFILE_COPY_ALLOWED)) {
-        g_app.show_toast(L"恢复失败：" + error_text(GetLastError()));
-        return;
+    {
+        std::wstring qerr;
+        if (!qtn_restore_file(q.stored, q.original, qerr)) {
+            g_app.show_toast(L"恢复失败：" + qerr);
+            return;
+        }
     }
     g_app.quarantine.erase(g_app.quarantine.begin() + g_app.selectedQuar);
     g_app.selectedQuar = g_app.quarantine.empty() ? -1 : 0;

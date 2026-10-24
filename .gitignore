@@ -8,6 +8,8 @@
 *.dmp
 *.etl
 *.zip
+*.pfx
+*.cer
 
 # ---- Build outputs ----
 /最终交付/bin/

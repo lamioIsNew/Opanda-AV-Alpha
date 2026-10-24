@@ -1,8 +1,8 @@
 ﻿# 恶意软件扫描器 · 交付说明
 
-版本：`1.0.0-dll-gui-20261024`  
+版本：`1.1.0-night-20261025`  
 平台：Windows 10/11 x64  
-交付日期：2026-10-24
+交付日期：2026-10-25
 
 ## 1. 这是什么
 
@@ -10,10 +10,13 @@
 
 - `scanner.dll`：扫描引擎，C ABI，供 GUI 或其他程序调用；
 - `db/signatures.db`：外部特征库（当前 53 条），优先级高于 DLL 内置兜底表；
-- `ScannerUI.exe`：Win32 + Direct2D/DirectWrite 自绘的 WD 风格 GUI；
+- `ScannerUI.exe`：Win32 + Direct2D/DirectWrite 自绘的 WD 风格极简 GUI（5 页、纯灰阶）；
 - `scanner_test.exe`：最小调用示例 / 自检工具；
 - `sigdb_builder.exe`：把内置特征导出为 `signatures.db` 的工具；
-- `src/`、`sdk/`、`build/`：源码、头文件、重建脚本。
+- `src/hardware.c`：SGX / PT / TPM 2.0 / Hypervisor 硬件检测；
+- `driver/`：可选的 HIPS 内核执行端源码（测试签名、仅 VM）；
+- `tests/vm/`：VM 隔离测试脚本与只读 ISO 生成脚本；
+- `src/`、`sdk/`、`build/`：源码、头文件、MSVC 重建脚本。
 
 **扫描过程中绝不执行样本。** `pe_vm` 在 DLL 模式强制关闭；GUI 只调用单文件静态扫描接口。
 
@@ -28,9 +31,10 @@ bin\ScannerUI.exe
 启动后：
 
 1. 点“选择文件”或“选择文件夹”；
-2. 点“开始扫描”；
+2. 点“快速扫描”；
 3. 高危/疑似结果可以“隔离选中”或“打开位置”；
-4. 左侧“隔离区”可恢复或永久删除；左侧“日志”查看历史。
+4. 左侧“隔离区”可恢复或永久删除；左侧“保护历史记录”查看历史；
+5. “安全性概览”的“硬件环境检测”卡片展示 SGX / PT / TPM 2.0 / 虚拟化环境。
 
 命令行自检：
 
@@ -61,9 +65,13 @@ MalwareScanner_Release/
   src/                       可重建源码快照
     gui/                     GUI 源码、manifest、资源脚本
   build/
-    build_scanner_dll.ps1    重建 DLL / 测试程序 / 特征库
-    build_gui.ps1            重建 GUI
+    build_scanner_msvc.ps1   重建 scanner.dll（MSVC）
+    build_gui_msvc.ps1       重建 ScannerUI.exe（MSVC）
     build_all.ps1            依次重建
+    build_scanner_dll.ps1    旧 MinGW 脚本（参考）
+    build_gui.ps1            旧 MinGW 脚本（参考）
+  driver/                    可选 HIPS 驱动源码、客户端、INF、构建/签名脚本
+  tests/vm/                  VM 隔离测试脚本、只读 ISO 生成脚本
   docs/
     SCANNER_DLL.md           DLL ABI、特征库格式、构建
     GUI.md                   GUI 页面、参数、数据目录
@@ -84,14 +92,17 @@ MalwareScanner_Release/
 | 隔离 → 恢复 | 正常，原路径恢复，SHA256 写入索引 |
 | 深浅色 / 跟随系统 | 正常切换并持久化 |
 | 缺少 `scanner.dll` | 启动时明确提示，不静默失败 |
+| MSVC x64 构建 | `scanner.dll` / `ScannerUI.exe` / `HipsDriver.sys` / `pe_vm_msvc.exe` 均编译通过 |
+| 隔离文件 | QTN1 头 + XOR 0x5A；旧明文 `.qtn` 兼容 |
 
 ## 5. 安全边界（重要）
 
 - **静态扫描不等于沙箱行为分析**；不执行、不调试、不注入样本。
 - 加壳文件显示 `[PACKED]`，不直接判恶意；`pe_vm` 不在 DLL 中运行。
-- 隔离区是**用户主动操作**：文件被移动到 `quarantine/`，当前版本按原文件保存并改为 `.qtn` 扩展名，未加密；索引为 `quarantine/index.tsv`。请把交付目录放在受控账户/目录下。
-- 当前不安装驱动、不注册服务、不常驻监控；因此实时拦截、强杀、强删、自保护均未启用。
-- 驱动执行端需要 WHQL/attestation 签名和 minifilter altitude，由交付方/使用方自行完成签名与测试；本包不包含未签名驱动二进制。
+- 隔离区是**用户主动操作**：文件被移动到 `quarantine/`，使用 QTN1 轻量加密（XOR 0x5A）；索引为 `quarantine/index.tsv`。XOR 只是混淆，不是密码学加密；敏感环境请配合 BitLocker/EFS。
+- GUI 不安装驱动、不注册服务、不常驻监控；实时拦截、自保护未启用。
+- `driver/` 提供可选的 HIPS 内核执行端源码与测试签名脚本，**只允许在 VM + 测试签名 + 快照**中加载；生产分发需要 WHQL/attestation 签名。
+- 驱动能力边界：普通进程可结束，PPL/受保护进程受系统限制；被独占打开的文件可能只能返回共享冲突；不提供任意内核读写。
 - 正式分发前请对 `ScannerUI.exe`、`scanner.dll` 做 Authenticode 签名；当前包未签名。
 - 不要在生产机直接双击未知样本测试；请使用隔离虚拟机。
 
@@ -107,7 +118,7 @@ MalwareScanner_Release/
 默认在 `bin\logs\history.tsv`、`bin\quarantine\`、`bin\config\settings.ini`。设置页有“打开数据目录”。
 
 **Q：为什么没有实时防护？**  
-当前里程碑只交付静态扫描 + GUI；实时防护需要服务与驱动，见 `docs/DRIVER_BOUNDARY.md`。
+当前交付静态扫描 + 极简 GUI；`driver/` 只是可选的测试用执行端，不注册服务、不做实时监控。实时防护仍需要用户态服务 + minifilter，见 `docs/DRIVER_BOUNDARY.md`。
 
 **Q：能扫描大于 256 MB 的文件吗？**  
 设置页可调最大文件大小；超过限制的文件会跳过并计入“跳过”，不会读入内存。

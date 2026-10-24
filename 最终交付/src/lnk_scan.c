@@ -14,7 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <strings.h>
 
 static int rd_u16(const unsigned char *b, long size, long off, unsigned *v) {
     if (off < 0 || off + 2 > size) return 0;

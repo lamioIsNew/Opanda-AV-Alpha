@@ -65,6 +65,23 @@ SCANNER_API int scanner_signature_db_count(void);
 /* 重新读取 signatures.db（返回新的外部库条数；扫描进行中调用会被串行化） */
 SCANNER_API int scanner_reload_signature_db(void);
 
+/* ---- 硬件安全环境（任务 3，附加导出，不改变既有 ABI） ----
+ * 仅用于 GUI“安全性概览”展示，不参与扫描判定，也不做任何规避动作。
+ * 字段为 0/1 布尔值；tpm_version 为 0/12/20；detail 为 UTF-8 可读说明。
+ */
+typedef struct ScannerHardwareInfo {
+    unsigned int sgx;           /* CPUID.(EAX=7,ECX=0):EBX[2]  */
+    unsigned int pt;            /* CPUID.(EAX=7,ECX=0):EBX[25] */
+    unsigned int tpm20;         /* TBS 报告 TPM 2.0 且可用     */
+    unsigned int tpm_version;   /* 0=未知 12=TPM 1.2 20=TPM 2.0 */
+    unsigned int tpm_interface; /* TPM_IFTYPE_*                 */
+    unsigned int hypervisor;    /* CPUID.(EAX=1):ECX[31]       */
+    char         detail[256];   /* UTF-8 说明（TPM/错误原因）   */
+} ScannerHardwareInfo;
+
+/* 读取一次硬件状态。返回 0 成功，1 参数错误。 */
+SCANNER_API int scanner_get_hardware_info(ScannerHardwareInfo *out);
+
 #ifdef __cplusplus
 }
 #endif

@@ -2,6 +2,7 @@
 #pragma once
 
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #include <d2d1.h>
 #include <dwrite.h>
@@ -17,14 +18,13 @@
 #define WM_APP_SCAN_TICK (WM_APP + 1)
 #define WM_APP_SCAN_DONE (WM_APP + 2)
 
+/* 5 页极简信息架构（任务 1） */
 enum class Page {
-    Home = 0,
-    Scan,
-    Protection,
-    Quarantine,
-    Logs,
-    Driver,
-    Settings,
+    Overview = 0,   /* 安全性概览 */
+    Protection,     /* 病毒和威胁防护 */
+    Quarantine,     /* 隔离区 */
+    History,        /* 保护历史记录 */
+    Settings,       /* 安全设置 */
     Count
 };
 
@@ -123,8 +123,8 @@ struct App {
     ThemeMode themeMode = ThemeMode::System;
     Settings settings;
 
-    Page page = Page::Home;
-    Page lastPage = Page::Home;
+    Page page = Page::Overview;
+    Page lastPage = Page::Overview;
     ULONGLONG pageAnimStart = 0;
     bool animating = false;
 
@@ -146,6 +146,7 @@ struct App {
     std::vector<ScanEntry> results;
     int selectedResult = -1;
     float scrollScan = 0.0f;
+    float viewScanH = 0.0f;
     ULONGLONG scanStart = 0;
     bool scanFinished = false;
     bool scanCanceled = false;
@@ -163,10 +164,17 @@ struct App {
     int selectedLog = -1;
     float scrollQuar = 0.0f;
     float scrollLog = 0.0f;
+    float viewQuarH = 0.0f;
+    float viewLogH = 0.0f;
 
-    /* 驱动页 */
+    /* 驱动状态（显示在设置页，不再单独占一个菜单） */
     std::wstring driverState = L"未安装";
     std::wstring driverDetail = L"未检测到 MalwareScannerDrv 服务";
+
+    /* 硬件安全环境（任务 3） */
+    ScannerHardwareInfo hw = {};
+    bool hwReady = false;
+    ULONGLONG hwQueriedAt = 0;
 
     /* 病毒库 */
     int dbCount = 0;
@@ -207,6 +215,9 @@ void scanner_quarantine_selected();
 void scanner_restore_selected();
 void scanner_delete_selected();
 void scanner_refresh_driver();
+void scanner_refresh_hardware();
+void scanner_clear_results();
+void open_log_dir();
 void scanner_load_settings();
 void scanner_save_settings();
 std::wstring scanner_data_dir();

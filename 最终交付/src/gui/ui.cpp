@@ -1,188 +1,109 @@
-/* ui.cpp -- Direct2D 自绘界面（WD 风格） */
+/* ui.cpp -- WD 风格极简 GUI（任务 1）
+ *
+ * 约束：
+ *   · 只用黑/白/灰，自适应浅色/深色，不出现彩色文字；
+ *   · 左侧扁平侧边栏，仅 5 项；
+ *   · 图标使用 Segoe Fluent Icons / Segoe MDL2 Assets 字体字形，
+ *     不自绘图标；
+ *   · 原生 DWM 圆角在 main.cpp 的 update_backdrop() 中设置。
+ */
 #include "app.h"
 
 #include <d2d1helper.h>
+#include <shellapi.h>
+#include <shlwapi.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
-#include <shellapi.h>
 
-enum {
-    ID_NAV_HOME = 1, ID_NAV_SCAN, ID_NAV_PROTECTION, ID_NAV_QUARANTINE,
-    ID_NAV_LOGS, ID_NAV_DRIVER, ID_NAV_SETTINGS,
-    ID_HEADER_STATUS = 20,
+namespace {
 
-    ID_HOME_QUICK = 100, ID_HOME_CUSTOM, ID_HOME_VIEW_LOGS, ID_HOME_PROTECT,
+const float SIDEBAR_W = 236.0f;
+const float PAD = 28.0f;
+const float HEADER_H = 92.0f;
+const float ROW_H = 40.0f;
+const float HIST_ROW_H = 52.0f;
 
-    ID_SCAN_FILE = 200, ID_SCAN_DIR, ID_SCAN_QUICK, ID_SCAN_START, ID_SCAN_CLEAR,
-    ID_SCAN_QUARANTINE, ID_SCAN_OPEN,
+enum : int {
+    ID_NAV_OVERVIEW = 1001,
+    ID_NAV_PROTECTION,
+    ID_NAV_QUARANTINE,
+    ID_NAV_HISTORY,
+    ID_NAV_SETTINGS,
 
-    ID_PROT_DRIVER = 300,
+    ID_QUICK = 2001,
+    ID_PICK_FILE,
+    ID_PICK_FOLDER,
+    ID_STOP,
+    ID_CLEAR,
+    ID_QUAR_SEL,
+    ID_OPEN_SEL,
+    ID_HW_REFRESH,
+    ID_VIEW_HISTORY,
 
-    ID_QUAR_REFRESH = 400, ID_QUAR_RESTORE, ID_QUAR_DELETE,
+    ID_RESTORE = 3001,
+    ID_DELETE,
+    ID_QUAR_REFRESH,
 
-    ID_LOG_REFRESH = 500, ID_LOG_CLEAR, ID_LOG_OPEN,
+    ID_HIST_REFRESH = 4001,
+    ID_HIST_CLEAR,
+    ID_OPEN_LOGS,
 
-    ID_DRV_REFRESH = 600, ID_DRV_OPEN_DATA,
+    ID_THEME_SYS = 5001,
+    ID_THEME_LIGHT,
+    ID_THEME_DARK,
+    ID_ANIM,
+    ID_DB_RELOAD,
+    ID_OPEN_DATA,
+    ID_DRV_REFRESH,
+    ID_MAX_MINUS,
+    ID_MAX_PLUS,
 
-    ID_SET_THEME_SYS = 700, ID_SET_THEME_LIGHT, ID_SET_THEME_DARK,
-    ID_SET_MAX_MINUS, ID_SET_MAX_PLUS, ID_SET_ANIM, ID_SET_RELOAD, ID_SET_OPEN,
-
-    ID_ROW_RESULT = 1000,
-    ID_ROW_QUAR = 2000,
-    ID_ROW_LOG = 3000
+    ID_RESULT_ROW = 20000,
+    ID_QUAR_ROW = 30000,
+    ID_HIST_ROW = 40000
 };
 
 struct Layout {
-    float W, H, sb, cx, cw;
+    float w = 1000.0f;
+    float h = 640.0f;
+    float contentL = SIDEBAR_W + PAD;
+    float contentR = 1000.0f - PAD;
+    float contentW = 1000.0f - SIDEBAR_W - PAD * 2;
+    float bodyTop = HEADER_H;
 };
-
-static Layout layout_of(App &a) {
-    D2D1_SIZE_F s = a.gfx.rt ? a.gfx.rt->GetSize() : D2D1::SizeF(1240, 840);
-    Layout l;
-    l.W = s.width;
-    l.H = s.height;
-    l.sb = (l.W < 1120.0f) ? 212.0f : 232.0f;
-    l.cx = l.sb + 30.0f;
-    l.cw = l.W - l.cx - 30.0f;
-    return l;
-}
 
 static D2D1_RECT_F R(float l, float t, float r, float b) {
     return D2D1::RectF(l, t, r, b);
 }
 
-static void fr(App &a, const D2D1_RECT_F &r, float rad, const D2D1_COLOR_F &c) {
-    if (!a.gfx.rt || r.right <= r.left || r.bottom <= r.top) return;
-    a.gfx.brush->SetColor(c);
-    a.gfx.rt->FillRoundedRectangle(D2D1::RoundedRect(r, rad, rad), a.gfx.brush);
+static float rw(const D2D1_RECT_F &r) { return r.right - r.left; }
+static float rh(const D2D1_RECT_F &r) { return r.bottom - r.top; }
+
+static Layout make_layout(App &a) {
+    Layout l;
+    RECT rc;
+    GetClientRect(a.hwnd, &rc);
+    float dpi = a.gfx.dpi >= 96.0f ? a.gfx.dpi : 96.0f;
+    l.w = std::max(320.0f, (float)(rc.right - rc.left) * 96.0f / dpi);
+    l.h = std::max(240.0f, (float)(rc.bottom - rc.top) * 96.0f / dpi);
+    l.contentL = SIDEBAR_W + PAD;
+    l.contentR = l.w - PAD;
+    l.contentW = std::max(160.0f, l.contentR - l.contentL);
+    l.bodyTop = HEADER_H;
+    return l;
 }
 
-static void sr(App &a, const D2D1_RECT_F &r, float rad, const D2D1_COLOR_F &c, float w = 1.0f) {
-    if (!a.gfx.rt || r.right <= r.left || r.bottom <= r.top) return;
-    a.gfx.brush->SetColor(c);
-    a.gfx.rt->DrawRoundedRectangle(D2D1::RoundedRect(r, rad, rad), a.gfx.brush, w);
-}
-
-static void rect(App &a, const D2D1_RECT_F &r, const D2D1_COLOR_F &c) {
-    if (!a.gfx.rt) return;
-    a.gfx.brush->SetColor(c);
-    a.gfx.rt->FillRectangle(r, a.gfx.brush);
-}
-
-static void line(App &a, float x1, float y1, float x2, float y2,
-                 const D2D1_COLOR_F &c, float w = 1.0f) {
-    a.gfx.brush->SetColor(c);
-    a.gfx.rt->DrawLine(D2D1::Point2F(x1, y1), D2D1::Point2F(x2, y2), a.gfx.brush, w);
-}
-
-static void txt(App &a, const std::wstring &s, const D2D1_RECT_F &r,
-                IDWriteTextFormat *f, const D2D1_COLOR_F &c,
-                DWRITE_TEXT_ALIGNMENT al = DWRITE_TEXT_ALIGNMENT_LEADING,
-                DWRITE_PARAGRAPH_ALIGNMENT va = DWRITE_PARAGRAPH_ALIGNMENT_NEAR,
-                D2D1_DRAW_TEXT_OPTIONS opt = D2D1_DRAW_TEXT_OPTIONS_CLIP) {
-    if (!a.gfx.rt || !f || s.empty()) return;
-    f->SetTextAlignment(al);
-    f->SetParagraphAlignment(va);
-    a.gfx.brush->SetColor(c);
-    a.gfx.rt->DrawText(s.c_str(), (UINT32)s.size(), f, r, a.gfx.brush, opt);
-}
-
-static void icon(App &a, const wchar_t *glyph, const D2D1_RECT_F &r,
-                 const D2D1_COLOR_F &c, IDWriteTextFormat *f = nullptr) {
-    txt(a, glyph ? glyph : L"", r, f ? f : a.gfx.fIcon, c,
-        DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-}
-
-static void shadow(App &a, const D2D1_RECT_F &r, float rad) {
-    if (!a.settings.animations) return;
-    float base = a.theme.dark ? 0.16f : 0.045f;
-    for (int i = 0; i < 3; i++) {
-        float o = 1.0f + i * 2.0f;
-        D2D1_RECT_F s = R(r.left - o, r.top + o, r.right + o, r.bottom + o + 2.0f);
-        fr(a, s, rad + o, C(0x000000, base - i * 0.012f));
-    }
-}
-
-static void card(App &a, const D2D1_RECT_F &r, float rad = 14.0f, bool hover = false) {
-    shadow(a, r, rad);
-    fr(a, r, rad, hover ? a.theme.cardHover : a.theme.card);
-    sr(a, r, rad, a.theme.border, 1.0f);
-}
-
-static void chip(App &a, const D2D1_RECT_F &r, const std::wstring &s,
-                 const D2D1_COLOR_F &fg, const D2D1_COLOR_F &bg,
-                 IDWriteTextFormat *fmt = nullptr) {
-    fr(a, r, (r.bottom - r.top) * 0.5f, bg);
-    txt(a, s, r, fmt ? fmt : a.gfx.fBadge, fg,
-        DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-}
-
-static void button(App &a, int id, const D2D1_RECT_F &r, const std::wstring &label,
-                   bool primary = false, bool danger = false, bool enabled = true,
-                   const wchar_t *glyph = nullptr) {
-    bool hov = enabled && a.hoverId == id;
-    bool press = enabled && a.pressedId == id && hov;
-    D2D1_COLOR_F fill, fg, border;
-
-    if (!enabled) {
-        fill = a.theme.hover;
-        fg = a.theme.text3;
-        border = a.theme.border;
-    } else if (primary) {
-        fill = a.theme.accent;
-        if (hov) fill = mixc(fill, a.theme.white, 0.10f);
-        if (press) fill = mixc(fill, a.theme.black, 0.10f);
-        fg = a.theme.white;
-        border = fill;
-    } else if (danger) {
-        fill = a.theme.dangerSoft;
-        fg = a.theme.danger;
-        border = mixc(a.theme.danger, a.theme.card, 0.55f);
-        if (hov) fill = mixc(fill, a.theme.danger, 0.08f);
-    } else {
-        fill = a.theme.card2;
-        fg = a.theme.text;
-        border = a.theme.border;
-        if (hov) fill = a.theme.cardHover;
-        if (press) fill = mixc(fill, a.theme.black, a.theme.dark ? 0.10f : 0.05f);
-    }
-
-    fr(a, r, 8.0f, fill);
-    sr(a, r, 8.0f, border, 1.0f);
-    if (enabled) a.hits.push_back({id, r});
-
-    float textLeft = r.left + 14.0f;
-    if (glyph) {
-        D2D1_RECT_F ir = R(r.left + 12.0f, r.top, r.left + 34.0f, r.bottom);
-        icon(a, glyph, ir, fg, a.gfx.fIcon);
-        textLeft = r.left + 36.0f;
-    }
-    D2D1_RECT_F tr = R(textLeft, r.top, r.right - 10.0f, r.bottom);
-    txt(a, label, tr, a.gfx.fButton, fg, DWRITE_TEXT_ALIGNMENT_CENTER,
-        DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-}
-
-static void toggle(App &a, const D2D1_RECT_F &r, bool on, bool enabled) {
-    D2D1_COLOR_F track = !enabled ? a.theme.track : (on ? a.theme.accent : a.theme.track);
-    fr(a, r, r.bottom - r.top, track);
-    float d = (r.bottom - r.top) - 6.0f;
-    float x = on ? (r.right - 3.0f - d) : (r.left + 3.0f);
-    D2D1_ELLIPSE e = D2D1::Ellipse(D2D1::Point2F(x + d * 0.5f, (r.top + r.bottom) * 0.5f),
-                                   d * 0.5f, d * 0.5f);
-    a.gfx.brush->SetColor(enabled ? a.theme.white : a.theme.text3);
-    a.gfx.rt->FillEllipse(e, a.gfx.brush);
-}
-
-static std::wstring from_u8(const char *p) {
-    if (!p || !*p) return L"";
-    int n = MultiByteToWideChar(CP_UTF8, 0, p, -1, NULL, 0);
+static std::wstring u8(const char *s) {
+    if (!s || !s[0]) return L"";
+    int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
     if (n <= 1) return L"";
-    std::wstring s((size_t)n - 1, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, p, -1, &s[0], n);
-    return s;
+    std::wstring w((size_t)n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, &w[0], n);
+    while (!w.empty() && w.back() == L'\0') w.pop_back();
+    return w;
 }
 
 static std::wstring base_name(const std::wstring &p) {
@@ -190,1211 +111,828 @@ static std::wstring base_name(const std::wstring &p) {
     return (x == std::wstring::npos) ? p : p.substr(x + 1);
 }
 
-static std::wstring score_text(double s) {
-    if (s < 0) return L"—";
-    wchar_t b[32];
-    if (s < 10.0) swprintf(b, 32, L"%.2f", s);
-    else swprintf(b, 32, L"%.1f", s);
-    return b;
+static std::wstring elide(const std::wstring &s, size_t max_chars) {
+    if (s.size() <= max_chars) return s;
+    if (max_chars <= 3) return s.substr(0, max_chars);
+    return L"…" + s.substr(s.size() - (max_chars - 1));
 }
 
-static D2D1_COLOR_F level_fg(App &a, int lv) {
-    switch (lv) {
-        case 3: return a.theme.danger;
-        case 2: return a.theme.warning;
-        case 1: return a.theme.success;
-        case 4: return a.theme.warning;
-        case 5: return a.theme.text3;
-        default: return a.theme.danger;
+static std::wstring bracket_short(const std::wstring &b) {
+    if (b.find(L"HIGH RISK") != std::wstring::npos) return L"高危";
+    if (b.find(L"SUSPICIOUS") != std::wstring::npos) return L"疑似";
+    if (b.find(L"TRUSTED") != std::wstring::npos) return L"可信";
+    if (b.find(L"PACKED") != std::wstring::npos) return L"加壳";
+    if (b.find(L"SKIP") != std::wstring::npos) return L"跳过";
+    if (b.find(L"NORMAL") != std::wstring::npos) return L"正常";
+    return b.empty() ? L"未知" : b;
+}
+
+static void fill_rect(App &a, const D2D1_RECT_F &r, const D2D1_COLOR_F &c, float radius = 0.0f) {
+    if (!a.gfx.rt || !a.gfx.brush) return;
+    a.gfx.brush->SetColor(c);
+    if (radius > 0.0f) {
+        float rr = std::min(radius, std::min(rw(r), rh(r)) * 0.5f);
+        a.gfx.rt->FillRoundedRectangle(D2D1::RoundedRect(r, rr, rr), a.gfx.brush);
+    } else {
+        a.gfx.rt->FillRectangle(r, a.gfx.brush);
     }
 }
 
-static D2D1_COLOR_F level_bg(App &a, int lv) {
-    switch (lv) {
-        case 3: return a.theme.dangerSoft;
-        case 2: return a.theme.warningSoft;
-        case 1: return a.theme.successSoft;
-        case 4: return a.theme.warningSoft;
-        case 5: return a.theme.hover;
-        default: return a.theme.dangerSoft;
+static void stroke_rect(App &a, const D2D1_RECT_F &r, const D2D1_COLOR_F &c, float radius = 0.0f, float width = 1.0f) {
+    if (!a.gfx.rt || !a.gfx.brush) return;
+    a.gfx.brush->SetColor(c);
+    if (radius > 0.0f) {
+        float rr = std::min(radius, std::min(rw(r), rh(r)) * 0.5f);
+        a.gfx.rt->DrawRoundedRectangle(D2D1::RoundedRect(r, rr, rr), a.gfx.brush, width);
+    } else {
+        a.gfx.rt->DrawRectangle(r, a.gfx.brush, width);
     }
 }
 
-static const wchar_t *level_glyph(int lv) {
-    switch (lv) {
-        case 3: return L"\uEA39"; /* blocked */
-        case 2: return L"\uE7BA"; /* warning */
-        case 1: return L"\uE73E"; /* check */
-        case 4: return L"\uE7B8"; /* package */
-        case 5: return L"\uE8AB"; /* skip */
-        default: return L"\uE783"; /* error */
+static void line(App &a, float x1, float y1, float x2, float y2, const D2D1_COLOR_F &c, float width = 1.0f) {
+    if (!a.gfx.rt || !a.gfx.brush) return;
+    a.gfx.brush->SetColor(c);
+    a.gfx.rt->DrawLine(D2D1::Point2F(x1, y1), D2D1::Point2F(x2, y2), a.gfx.brush, width);
+}
+
+static void text(App &a, const std::wstring &s, const D2D1_RECT_F &r, const D2D1_COLOR_F &c,
+                 IDWriteTextFormat *fmt, DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
+                 DWRITE_PARAGRAPH_ALIGNMENT valign = DWRITE_PARAGRAPH_ALIGNMENT_NEAR) {
+    if (!a.gfx.rt || !a.gfx.brush || !fmt || s.empty()) return;
+    fmt->SetTextAlignment(align);
+    fmt->SetParagraphAlignment(valign);
+    a.gfx.brush->SetColor(c);
+    a.gfx.rt->DrawTextW(s.c_str(), (UINT32)s.size(), fmt, r, a.gfx.brush,
+                        D2D1_DRAW_TEXT_OPTIONS_CLIP);
+}
+
+static void text_wrap(App &a, const std::wstring &s, const D2D1_RECT_F &r, const D2D1_COLOR_F &c,
+                      IDWriteTextFormat *fmt) {
+    if (!a.gfx.rt || !a.gfx.brush || !fmt || s.empty()) return;
+    fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+    fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+    a.gfx.brush->SetColor(c);
+    a.gfx.rt->DrawTextW(s.c_str(), (UINT32)s.size(), fmt, r, a.gfx.brush,
+                        D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+}
+
+static void card(App &a, const D2D1_RECT_F &r) {
+    fill_rect(a, r, a.theme.card, 10.0f);
+    stroke_rect(a, r, a.theme.border, 10.0f);
+}
+
+static void chip(App &a, const D2D1_RECT_F &r, const std::wstring &s, bool strong = false) {
+    fill_rect(a, r, strong ? a.theme.accentSoft : a.theme.card2, rh(r) * 0.5f);
+    stroke_rect(a, r, a.theme.border, rh(r) * 0.5f);
+    text(a, s, r, strong ? a.theme.text : a.theme.text2, a.gfx.fBadge,
+         DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+}
+
+static bool button(App &a, int id, const D2D1_RECT_F &r, const std::wstring &label,
+                   bool primary = false, bool enabled = true) {
+    bool hover = enabled && a.hoverId == id;
+    bool pressed = enabled && a.pressedId == id;
+    D2D1_COLOR_F bg, fg, bd;
+
+    if (!enabled) {
+        bg = a.theme.card2;
+        fg = a.theme.text3;
+        bd = a.theme.border;
+    } else if (primary) {
+        bg = pressed ? a.theme.accent2 : a.theme.accent;
+        fg = a.theme.dark ? a.theme.black : a.theme.white;
+        bd = bg;
+    } else {
+        bg = hover ? a.theme.cardHover : a.theme.card;
+        fg = a.theme.text;
+        bd = hover ? a.theme.borderStrong : a.theme.border;
+    }
+    fill_rect(a, r, bg, 6.0f);
+    stroke_rect(a, r, bd, 6.0f);
+    text(a, label, r, fg, a.gfx.fButton, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    if (enabled) a.hits.push_back({id, r});
+    return enabled;
+}
+
+static void nav_item(App &a, int id, float x, float y, float w, float h,
+                     const wchar_t *icon, const std::wstring &label, bool selected) {
+    D2D1_RECT_F r = R(x, y, x + w, y + h);
+    if (selected) fill_rect(a, r, a.theme.accentSoft, 8.0f);
+    else if (a.hoverId == id) fill_rect(a, r, a.theme.hover, 8.0f);
+
+    if (selected) fill_rect(a, R(x, y + 9.0f, x + 3.0f, y + h - 9.0f), a.theme.accent, 1.5f);
+    text(a, icon, R(x + 14.0f, y, x + 42.0f, y + h), a.theme.text, a.gfx.fIcon,
+         DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    text(a, label, R(x + 46.0f, y, x + w - 10.0f, y + h), a.theme.text, a.gfx.fBody,
+         DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    a.hits.push_back({id, r});
+}
+
+static const wchar_t *page_title(Page p) {
+    switch (p) {
+    case Page::Overview:   return L"安全性概览";
+    case Page::Protection: return L"病毒和威胁防护";
+    case Page::Quarantine: return L"隔离区";
+    case Page::History:    return L"保护历史记录";
+    case Page::Settings:   return L"安全设置";
+    default:               return L"";
     }
 }
 
-static std::wstring level_name(int lv) {
-    switch (lv) {
-        case 3: return L"高危";
-        case 2: return L"疑似";
-        case 1: return L"正常";
-        case 4: return L"加壳";
-        case 5: return L"跳过";
-        default: return L"错误";
+static const wchar_t *page_sub(Page p) {
+    switch (p) {
+    case Page::Overview:   return L"设备安全状态、硬件环境与最近活动";
+    case Page::Protection: return L"手动扫描、结果处置与威胁隔离";
+    case Page::Quarantine: return L"隔离文件使用 QTN1 轻量加密存储";
+    case Page::History:    return L"扫描与处置的历史记录";
+    case Page::Settings:   return L"外观、扫描、内核执行端与数据";
+    default:               return L"";
     }
 }
 
-static void scrollbar(App &a, const D2D1_RECT_F &r, float scroll, float content, float view) {
-    if (content <= view + 1.0f) return;
-    float trackW = 4.0f;
-    float x = r.right - trackW;
-    fr(a, R(x, r.top, x + trackW, r.bottom), trackW * 0.5f, a.theme.track);
-    float thumbH = std::max(30.0f, view * view / content);
-    float maxScroll = content - view;
-    float t = maxScroll > 0 ? scroll / maxScroll : 0;
-    float y = r.top + t * (view - thumbH);
-    fr(a, R(x, y, x + trackW, y + thumbH), trackW * 0.5f, a.theme.text3);
+static void draw_header(App &a, const Layout &l) {
+    text(a, page_title(a.page), R(l.contentL, 24.0f, l.contentR, 58.0f), a.theme.text,
+         a.gfx.fH1, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    text(a, page_sub(a.page), R(l.contentL, 58.0f, l.contentR, 80.0f), a.theme.text2,
+         a.gfx.fSmall, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    line(a, l.contentL, HEADER_H - 10.0f, l.contentR, HEADER_H - 10.0f, a.theme.border);
 }
 
-static std::wstring theme_name(int t) {
-    if (t == 1) return L"浅色";
-    if (t == 2) return L"深色";
-    return L"跟随系统";
-}
-
-/* ---------------- 侧边栏 / 顶栏 ---------------- */
 static void draw_sidebar(App &a, const Layout &l) {
-    rect(a, R(0, 0, l.sb, l.H), a.theme.sidebar);
-    line(a, l.sb - 1, 0, l.sb - 1, l.H, a.theme.border, 1.0f);
+    fill_rect(a, R(0, 0, SIDEBAR_W, l.h), a.theme.sidebar);
+    line(a, SIDEBAR_W - 1.0f, 0, SIDEBAR_W - 1.0f, l.h, a.theme.border);
 
-    icon(a, L"\uEA18", R(18, 22, 52, 56), a.theme.accent, a.gfx.fIconBrand);
-    txt(a, L"恶意软件扫描器", R(60, 22, l.sb - 12, 46), a.gfx.fBrand, a.theme.text);
-    txt(a, L"Malware Scanner", R(61, 46, l.sb - 12, 62), a.gfx.fSmall, a.theme.text3);
+    /* 品牌：纯灰阶方块 + 字体字形，不自绘图标 */
+    D2D1_RECT_F brand = R(20.0f, 22.0f, 52.0f, 54.0f);
+    fill_rect(a, brand, a.theme.accent, 8.0f);
+    text(a, L"\uEA18", brand, a.theme.dark ? a.theme.black : a.theme.white, a.gfx.fIcon,
+         DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    text(a, L"Opanda", R(62.0f, 20.0f, 210.0f, 40.0f), a.theme.text, a.gfx.fH3,
+         DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    text(a, L"安全中心", R(62.0f, 39.0f, 210.0f, 56.0f), a.theme.text3, a.gfx.fSmall,
+         DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 
-    const wchar_t *glyphs[] = {
-        L"\uE80F", L"\uE721", L"\uEA18", L"\uE74D",
-        L"\uE9D9", L"\uE7EF", L"\uE713"
-    };
-    const wchar_t *names[] = {
-        L"主页", L"扫描", L"防护", L"隔离区", L"日志", L"驱动与内核", L"设置"
-    };
-
-    float y = 100.0f;
-    const float itemH = 42.0f;
-    const float gap = 4.0f;
-    for (int i = 0; i < 7; i++) {
-        int id = ID_NAV_HOME + i;
-        D2D1_RECT_F r = R(12, y, l.sb - 12, y + itemH);
-        bool sel = (int)a.page == i;
-        bool hov = a.hoverId == id;
-        if (sel) {
-            fr(a, r, 9.0f, a.theme.accentSoft);
-            fr(a, R(r.left, r.top + 11, r.left + 3, r.bottom - 11), 1.5f, a.theme.accent);
-        } else if (hov) {
-            fr(a, r, 9.0f, a.theme.hover);
-        }
-        D2D1_COLOR_F fg = sel ? a.theme.accent : a.theme.text2;
-        icon(a, glyphs[i], R(r.left + 14, r.top, r.left + 40, r.bottom), fg);
-        txt(a, names[i], R(r.left + 48, r.top, r.right - 40, r.bottom), a.gfx.fBody, fg,
-            DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        if (i == 3 && !a.quarantine.empty()) {
-            std::wstring n = std::to_wstring(a.quarantine.size());
-            D2D1_RECT_F br = R(r.right - 38, r.top + 12, r.right - 12, r.bottom - 12);
-            chip(a, br, n, a.theme.danger, a.theme.dangerSoft, a.gfx.fBadge);
-        }
-        a.hits.push_back({id, r});
-        y += itemH + gap;
-    }
-
-    /* 底部引擎/病毒库状态 */
-    D2D1_RECT_F sc = R(12, l.H - 100, l.sb - 12, l.H - 18);
-    fr(a, sc, 11.0f, a.theme.card2);
-    sr(a, sc, 11.0f, a.theme.border, 1.0f);
-    D2D1_ELLIPSE dot = D2D1::Ellipse(D2D1::Point2F(sc.left + 16, sc.top + 20), 4, 4);
-    a.gfx.brush->SetColor(a.engineReady ? a.theme.success : a.theme.danger);
-    a.gfx.rt->FillEllipse(dot, a.gfx.brush);
-    txt(a, a.engineReady ? L"扫描引擎已就绪" : L"扫描引擎未加载",
-        R(sc.left + 28, sc.top + 9, sc.right - 10, sc.top + 31), a.gfx.fSmall, a.theme.text2);
-    txt(a, L"病毒库 " + std::to_wstring(a.dbCount) + L" 条",
-        R(sc.left + 14, sc.top + 36, sc.right - 10, sc.top + 56), a.gfx.fSmall, a.theme.text3);
-    txt(a, L"v" + a.engineVersion,
-        R(sc.left + 14, sc.top + 56, sc.right - 10, sc.top + 76), a.gfx.fSmall, a.theme.text3);
-}
-
-static void draw_header(App &a, const Layout &l, const std::wstring &title,
-                        const std::wstring &sub) {
-    txt(a, title, R(l.cx, 22, l.cx + l.cw - 240, 58), a.gfx.fH1, a.theme.text);
-    txt(a, sub, R(l.cx, 60, l.cx + l.cw - 260, 82), a.gfx.fBody, a.theme.text2);
-
-    std::wstring status = a.scanning.load() ? L"正在扫描" : L"手动扫描模式";
-    D2D1_RECT_F chipR = R(l.cx + l.cw - 188, 28, l.cx + l.cw, 60);
-    chip(a, chipR, status, a.scanning.load() ? a.theme.accent : a.theme.warning,
-         a.scanning.load() ? a.theme.accentSoft : a.theme.warningSoft, a.gfx.fButton);
-    a.hits.push_back({ID_HEADER_STATUS, chipR});
-}
-
-/* ---------------- 主页 ---------------- */
-static void draw_home(App &a, const Layout &l) {
-    draw_header(a, l, L"主页", L"设备状态、最近活动与保护概览");
-
-    float y = 96;
-    D2D1_RECT_F hero = R(l.cx, y, l.cx + l.cw, y + 180);
-    fr(a, hero, 16.0f, a.theme.accent);
-    /* 柔光装饰 */
-    D2D1_ELLIPSE e1 = D2D1::Ellipse(D2D1::Point2F(hero.right - 90, hero.top + 46), 140, 140);
-    a.gfx.brush->SetColor(C(0xFFFFFF, a.theme.dark ? 0.05f : 0.08f));
-    a.gfx.rt->FillEllipse(e1, a.gfx.brush);
-    D2D1_ELLIPSE e2 = D2D1::Ellipse(D2D1::Point2F(hero.right - 190, hero.bottom - 18), 90, 90);
-    a.gfx.brush->SetColor(C(0xFFFFFF, 0.04f));
-    a.gfx.rt->FillEllipse(e2, a.gfx.brush);
-    icon(a, L"\uEA18", R(hero.right - 230, hero.top + 20, hero.right - 30, hero.bottom - 10),
-         C(0xFFFFFF, 0.18f), a.gfx.fIconHuge);
-
-    txt(a, L"保持你的设备安全", R(hero.left + 26, hero.top + 22, hero.right - 260, hero.top + 60),
-        a.gfx.fHero, a.theme.white);
-    txt(a, L"快速扫描常见位置，或选择自定义文件夹。", R(hero.left + 26, hero.top + 66, hero.right - 280, hero.top + 92),
-        a.gfx.fHeroSub, C(0xFFFFFF, 0.88f));
-    txt(a, L"判定阈值：风险评分 ≥ 80 高危，≥ 50 疑似",
-        R(hero.left + 26, hero.top + 94, hero.right - 280, hero.top + 116),
-        a.gfx.fSmall, C(0xFFFFFF, 0.70f));
-
-    D2D1_RECT_F b1 = R(hero.left + 26, hero.bottom - 48, hero.left + 146, hero.bottom - 12);
-    D2D1_RECT_F b2 = R(hero.left + 158, hero.bottom - 48, hero.left + 290, hero.bottom - 12);
-    fr(a, b1, 8.0f, a.theme.white);
-    a.hits.push_back({ID_HOME_QUICK, b1});
-    txt(a, L"快速扫描", b1, a.gfx.fButton, a.theme.accent,
-        DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-    sr(a, b2, 8.0f, C(0xFFFFFF, 0.65f), 1.0f);
-    a.hits.push_back({ID_HOME_CUSTOM, b2});
-    txt(a, L"自定义扫描", b2, a.gfx.fButton, a.theme.white,
-        DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-
-    float sy = y + 198;
-    float gap = 14;
-    float sw = (l.cw - gap * 2) / 3;
-    const wchar_t *labels[3] = {L"上次扫描文件", L"发现威胁", L"特征库条目"};
-    std::wstring values[3];
-    values[0] = a.stats.files > 0 ? std::to_wstring(a.stats.files) : L"—";
-    values[1] = a.stats.high > 0 ? std::to_wstring(a.stats.high) : L"0";
-    values[2] = std::to_wstring(a.dbCount);
-    const wchar_t *icons[3] = {L"\uE9D9", L"\uEA39", L"\uE8F1"};
-    for (int i = 0; i < 3; i++) {
-        D2D1_RECT_F c = R(l.cx + i * (sw + gap), sy, l.cx + i * (sw + gap) + sw, sy + 108);
-        card(a, c);
-        txt(a, labels[i], R(c.left + 18, c.top + 16, c.right - 56, c.top + 36),
-            a.gfx.fSmall, a.theme.text2);
-        txt(a, values[i], R(c.left + 18, c.top + 38, c.right - 60, c.top + 78),
-            a.gfx.fStat, a.theme.text);
-        D2D1_RECT_F ic = R(c.right - 50, c.top + 16, c.right - 18, c.top + 48);
-        fr(a, ic, 8.0f, a.theme.accentSoft);
-        icon(a, icons[i], ic, a.theme.accent);
-        std::wstring sub = i == 1
-                               ? L"高危 / 疑似 " + std::to_wstring(a.stats.high) + L" / " +
-                                     std::to_wstring(a.stats.suspicious)
-                               : (i == 0 ? L"本次会话累计" : L"signatures.db");
-        txt(a, sub, R(c.left + 18, c.top + 78, c.right - 18, c.top + 98),
-            a.gfx.fSmall, a.theme.text3);
-    }
-
-    float by = sy + 126;
-    float bh = std::max(120.0f, l.H - by - 26);
-    float bw = l.cw * 0.58f;
-    D2D1_RECT_F recent = R(l.cx, by, l.cx + bw, by + bh);
-    D2D1_RECT_F protect = R(recent.right + 16, by, l.cx + l.cw, by + bh);
-    card(a, recent);
-    card(a, protect);
-
-    txt(a, L"最近活动", R(recent.left + 18, recent.top + 14, recent.right - 120, recent.top + 38),
-        a.gfx.fH2, a.theme.text);
-    D2D1_RECT_F vw = R(recent.right - 92, recent.top + 15, recent.right - 14, recent.top + 35);
-    button(a, ID_HOME_VIEW_LOGS, vw, L"查看全部", false, false, true);
-
-    if (a.history.empty()) {
-        icon(a, L"\uE9D9", R(recent.left + 18, recent.top + 52, recent.left + 58, recent.top + 92),
-             a.theme.text3, a.gfx.fIconBig);
-        txt(a, L"还没有扫描记录", R(recent.left + 70, recent.top + 58, recent.right - 18, recent.top + 82),
-            a.gfx.fH3, a.theme.text2);
-        txt(a, L"快速扫描后，这里会显示最近发现。", R(recent.left + 70, recent.top + 82, recent.right - 18, recent.top + 102),
-            a.gfx.fSmall, a.theme.text3);
-    } else {
-        float ry = recent.top + 50;
-        int n = std::min<int>(4, (int)a.history.size());
-        for (int i = 0; i < n; i++) {
-            const HistoryEntry &h = a.history[(size_t)i];
-            if (ry + 42 > recent.bottom - 8) break;
-            D2D1_ELLIPSE dot = D2D1::Ellipse(D2D1::Point2F(recent.left + 28, ry + 18), 9, 9);
-            a.gfx.brush->SetColor(level_bg(a, h.level));
-            a.gfx.rt->FillEllipse(dot, a.gfx.brush);
-            icon(a, level_glyph(h.level), R(recent.left + 19, ry + 9, recent.left + 37, ry + 27),
-                 level_fg(a, h.level), a.gfx.fSmall);
-            txt(a, base_name(h.path), R(recent.left + 48, ry + 4, recent.right - 100, ry + 24),
-                a.gfx.fBody, a.theme.text);
-            txt(a, h.time + L"  ·  " + h.caro, R(recent.left + 48, ry + 24, recent.right - 100, ry + 42),
-                a.gfx.fSmall, a.theme.text3);
-            D2D1_RECT_F br = R(recent.right - 92, ry + 7, recent.right - 16, ry + 29);
-            chip(a, br, h.level == 0 ? L"错误" : level_name(h.level), level_fg(a, h.level),
-                 level_bg(a, h.level));
-            ry += 46;
-        }
-    }
-
-    txt(a, L"保护状态", R(protect.left + 18, protect.top + 14, protect.right - 18, protect.top + 38),
-        a.gfx.fH2, a.theme.text);
-    struct Item { const wchar_t *glyph; const wchar_t *name; std::wstring value; int lv; };
-    Item items[3] = {
-        {L"\uEA18", L"实时保护", L"未启用", 2},
-        {L"\uE7EF", L"执行驱动", a.driverState, a.driverState == L"运行中" ? 1 : 2},
-        {L"\uE8F1", L"病毒库", std::to_wstring(a.dbCount) + L" 条", a.dbCount > 0 ? 1 : 2}
-    };
-    float py = protect.top + 52;
-    for (int i = 0; i < 3; i++) {
-        if (py + 30 > protect.bottom - 8) break;
-        D2D1_RECT_F ir = R(protect.left + 18, py, protect.left + 48, py + 30);
-        fr(a, ir, 7.0f, level_bg(a, items[i].lv));
-        icon(a, items[i].glyph, ir, level_fg(a, items[i].lv));
-        txt(a, items[i].name, R(protect.left + 58, py + 1, protect.right - 90, py + 21),
-            a.gfx.fBody, a.theme.text);
-        txt(a, items[i].value, R(protect.right - 100, py + 3, protect.right - 18, py + 23),
-            a.gfx.fSmall, level_fg(a, items[i].lv), DWRITE_TEXT_ALIGNMENT_TRAILING);
-        py += 42;
-    }
-    D2D1_RECT_F pb = R(protect.left + 18, protect.bottom - 42, protect.right - 18, protect.bottom - 12);
-    if (pb.top > py - 2) {
-        button(a, ID_HOME_PROTECT, pb, L"打开防护设置", false, false, true, L"\uE713");
-    }
-}
-
-/* ---------------- 扫描页 ---------------- */
-static void draw_scan(App &a, const Layout &l) {
-    draw_header(a, l, L"扫描", L"文件与文件夹的静态扫描；不执行样本");
-
-    D2D1_RECT_F pathCard = R(l.cx, 96, l.cx + l.cw, 184);
-    card(a, pathCard);
-    txt(a, L"扫描范围", R(pathCard.left + 18, pathCard.top + 14, pathCard.left + 120, pathCard.top + 34),
-        a.gfx.fSmall, a.theme.text2);
-    std::wstring path = a.scanPath.empty() ? L"拖入文件/文件夹，或点击右侧选择" : a.scanPath;
-    txt(a, path, R(pathCard.left + 18, pathCard.top + 38, pathCard.right - 330, pathCard.top + 62),
-        a.gfx.fBody, a.scanPath.empty() ? a.theme.text3 : a.theme.text);
-
-    D2D1_RECT_F bf = R(pathCard.right - 306, pathCard.top + 14, pathCard.right - 210, pathCard.top + 48);
-    D2D1_RECT_F bd = R(pathCard.right - 200, pathCard.top + 14, pathCard.right - 100, pathCard.top + 48);
-    D2D1_RECT_F bq = R(pathCard.right - 90, pathCard.top + 14, pathCard.right - 14, pathCard.top + 48);
-    button(a, ID_SCAN_FILE, bf, L"选择文件", false, false, true);
-    button(a, ID_SCAN_DIR, bd, L"选择文件夹", false, false, true);
-    button(a, ID_SCAN_QUICK, bq, L"快速扫描", false, false, true);
-
-    txt(a, a.scanPathIsDir ? L"将递归扫描该文件夹（跳过系统缓存与重解析点）"
-                           : L"单文件扫描；可随时拖入新的文件",
-        R(pathCard.left + 18, pathCard.top + 64, pathCard.right - 18, pathCard.top + 84),
-        a.gfx.fSmall, a.theme.text3);
-
-    float ay = pathCard.bottom + 16;
-    D2D1_RECT_F start = R(l.cx, ay, l.cx + 132, ay + 40);
-    if (a.scanning.load())
-        button(a, ID_SCAN_START, start, L"停止扫描", false, true, true, L"\uE71A");
-    else
-        button(a, ID_SCAN_START, start, L"开始扫描", true, false, true, L"\uE721");
-
-    std::wstring status;
-    if (a.scanning.load()) {
-        status = L"已扫描 " + std::to_wstring(a.stats.files) + L" 个文件  ·  跳过 " +
-                 std::to_wstring(a.stats.skipped);
-    } else if (a.scanFinished && a.scanCanceled) {
-        status = L"扫描已停止：已扫描 " + std::to_wstring(a.stats.files) + L" 个文件";
-    } else if (a.scanFinished) {
-        status = L"扫描完成：" + std::to_wstring(a.stats.files) + L" 个文件";
-    } else {
-        status = L"就绪；也可以把文件直接拖进窗口";
-    }
-    txt(a, status, R(start.right + 18, ay + 4, l.cx + l.cw - 120, ay + 36),
-        a.gfx.fBody, a.theme.text2, DWRITE_TEXT_ALIGNMENT_LEADING,
-        DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-
-    D2D1_RECT_F clear = R(l.cx + l.cw - 100, ay + 2, l.cx + l.cw, ay + 38);
-    button(a, ID_SCAN_CLEAR, clear, L"清空", false, false, a.scanFinished || !a.results.empty());
-
-    float py = ay + 56;
-    D2D1_RECT_F prog = R(l.cx, py, l.cx + l.cw, py + 82);
-    card(a, prog);
-    std::wstring cur;
-    {
-        std::lock_guard<std::mutex> lk(a.resultMutex);
-        cur = a.currentFile;
-    }
-    if (cur.empty()) cur = L"等待开始扫描";
-    txt(a, a.scanning.load() ? L"正在扫描"
-                             : (a.scanFinished
-                                    ? (a.scanCanceled ? L"扫描已停止" : L"扫描完成")
-                                    : L"就绪"),
-        R(prog.left + 18, prog.top + 12, prog.left + 120, prog.top + 34),
-        a.gfx.fH3, a.theme.text);
-    txt(a, cur, R(prog.left + 110, prog.top + 13, prog.right - 18, prog.top + 34),
-        a.gfx.fSmall, a.theme.text3, DWRITE_TEXT_ALIGNMENT_TRAILING);
-
-    D2D1_RECT_F track = R(prog.left + 18, prog.bottom - 24, prog.right - 18, prog.bottom - 16);
-    fr(a, track, 4.0f, a.theme.track);
-    if (a.scanFinished) {
-        fr(a, track, 4.0f, a.theme.accent);
-    } else if (a.scanning.load()) {
-        float phase = a.settings.animations
-                          ? (float)((GetTickCount64() - a.scanStart) % 1400) / 1400.0f
-                          : 0.45f;
-        float w = (track.right - track.left) * 0.30f;
-        float x = track.left + phase * ((track.right - track.left) + w) - w;
-        float x1 = std::max(track.left, x);
-        float x2 = std::min(track.right, x + w);
-        if (x2 > x1) fr(a, R(x1, track.top, x2, track.bottom), 4.0f, a.theme.accent);
-    }
-    std::wstring pc = a.scanning.load()
-                          ? L"正在分析文件内容…"
-                          : (a.scanFinished
-                                 ? (a.scanCanceled ? L"扫描已停止；已完成的条目仍可隔离或打开位置"
-                                                   : L"结果已写入下方列表，可隔离或打开位置")
-                                 : L"选择范围后开始扫描");
-    txt(a, pc, R(prog.left + 18, prog.bottom - 50, prog.right - 18, prog.bottom - 30),
-        a.gfx.fSmall, a.theme.text3);
-
-    float ry = prog.bottom + 14;
-    D2D1_RECT_F res = R(l.cx, ry, l.cx + l.cw, l.H - 26);
-    card(a, res);
-    txt(a, L"扫描结果", R(res.left + 18, res.top + 13, res.left + 120, res.top + 37),
-        a.gfx.fH2, a.theme.text);
-
-    float chipX = res.left + 126;
-    struct ChipDef { std::wstring text; int lv; };
-    ChipDef chips[5] = {
-        {L"高危 " + std::to_wstring(a.stats.high), 3},
-        {L"疑似 " + std::to_wstring(a.stats.suspicious), 2},
-        {L"正常 " + std::to_wstring(a.stats.normal), 1},
-        {L"加壳 " + std::to_wstring(a.stats.packed), 4},
-        {L"跳过 " + std::to_wstring(a.stats.skipped), 5}
-    };
+    const wchar_t *icons[5] = {L"\uE72E", L"\uE8B7", L"\uE74D", L"\uE81C", L"\uE713"};
+    const wchar_t *labels[5] = {L"安全性概览", L"病毒和威胁防护", L"隔离区", L"保护历史记录", L"安全设置"};
+    float y = 104.0f;
     for (int i = 0; i < 5; i++) {
-        D2D1_RECT_F cr = R(chipX, res.top + 14, chipX + 68, res.top + 36);
-        chip(a, cr, chips[i].text, level_fg(a, chips[i].lv), level_bg(a, chips[i].lv));
-        chipX += 74;
+        nav_item(a, ID_NAV_OVERVIEW + i, 12.0f, y, SIDEBAR_W - 24.0f, 44.0f,
+                 icons[i], labels[i], (int)a.page == i);
+        y += 48.0f;
     }
 
-    bool canQuar = a.selectedResult >= 0 && a.selectedResult < (int)a.results.size() &&
-                   a.results[(size_t)a.selectedResult].level >= 2 &&
-                   !a.results[(size_t)a.selectedResult].quarantined;
-    D2D1_RECT_F qb = R(res.right - 302, res.top + 12, res.right - 200, res.top + 38);
-    D2D1_RECT_F ob = R(res.right - 194, res.top + 12, res.right - 96, res.top + 38);
-    D2D1_RECT_F cb = R(res.right - 90, res.top + 12, res.right - 16, res.top + 38);
-    button(a, ID_SCAN_QUARANTINE, qb, L"隔离选中", false, true, canQuar);
-    button(a, ID_SCAN_OPEN, ob, L"打开位置", false, false, a.selectedResult >= 0 &&
-                                                          a.selectedResult < (int)a.results.size());
-    button(a, ID_SCAN_CLEAR, cb, L"清空", false, false, !a.results.empty());
-    line(a, res.left + 18, res.top + 46, res.right - 18, res.top + 46, a.theme.border, 1.0f);
+    /* 底部状态 */
+    float by = l.h - 94.0f;
+    line(a, 20.0f, by, SIDEBAR_W - 20.0f, by, a.theme.border);
+    std::wstring e = a.engineReady ? (L"引擎 " + a.engineVersion) : L"扫描引擎未加载";
+    text(a, e, R(20.0f, by + 12.0f, SIDEBAR_W - 20.0f, by + 30.0f), a.theme.text2,
+         a.gfx.fSmall);
+    text(a, L"病毒库 " + std::to_wstring(a.dbCount) + L" 条", R(20.0f, by + 30.0f, SIDEBAR_W - 20.0f, by + 48.0f),
+         a.theme.text3, a.gfx.fSmall);
+    text(a, L"隔离区 " + std::to_wstring(a.quarantine.size()) + L" 项", R(20.0f, by + 48.0f, SIDEBAR_W - 20.0f, by + 66.0f),
+         a.theme.text3, a.gfx.fSmall);
+}
 
-    float listTop = res.top + 56;
-    float listBottom = res.bottom - 10;
-    float viewH = std::max(20.0f, listBottom - listTop);
-    const float rowH = 56.0f;
-    float contentH = (float)a.results.size() * rowH;
-    float maxScroll = std::max(0.0f, contentH - viewH);
-    a.scrollScan = std::max(0.0f, std::min(a.scrollScan, maxScroll));
+static void draw_empty(App &a, const D2D1_RECT_F &r, const std::wstring &title, const std::wstring &sub) {
+    text(a, title, R(r.left, r.top + rh(r) * 0.32f, r.right, r.top + rh(r) * 0.32f + 26.0f),
+         a.theme.text2, a.gfx.fH3, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    text(a, sub, R(r.left, r.top + rh(r) * 0.32f + 30.0f, r.right, r.top + rh(r) * 0.32f + 52.0f),
+         a.theme.text3, a.gfx.fSmall, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+}
+
+static void draw_overview(App &a, const Layout &l) {
+    float y = l.bodyTop;
+
+    /* Hero */
+    D2D1_RECT_F hero = R(l.contentL, y, l.contentR, y + 128.0f);
+    card(a, hero);
+    D2D1_RECT_F ibox = R(hero.left + 18.0f, hero.top + 18.0f, hero.left + 74.0f, hero.top + 74.0f);
+    fill_rect(a, ibox, a.theme.accentSoft, 10.0f);
+    text(a, L"\uEA18", ibox, a.theme.text, a.gfx.fIconBig,
+         DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+
+    std::wstring heroTitle = a.engineReady ? L"扫描引擎已就绪" : L"扫描引擎未就绪";
+    std::wstring heroSub;
+    if (a.scanning.load()) {
+        heroSub = L"正在扫描：" + elide(base_name(a.currentFile), 52);
+    } else if (a.scanFinished) {
+        heroSub = L"上次扫描 " + std::to_wstring(a.stats.files) + L" 个文件 · 高危 " +
+                  std::to_wstring(a.stats.high) + L" · 疑似 " + std::to_wstring(a.stats.suspicious);
+    } else {
+        heroSub = L"手动扫描模式 · 选择文件或文件夹开始";
+    }
+    text(a, heroTitle, R(hero.left + 90.0f, hero.top + 16.0f, hero.right - 150.0f, hero.top + 44.0f),
+         a.theme.text, a.gfx.fH2, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    text(a, heroSub, R(hero.left + 90.0f, hero.top + 44.0f, hero.right - 24.0f, hero.top + 68.0f),
+         a.theme.text2, a.gfx.fSmall, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+
+    chip(a, R(hero.right - 132.0f, hero.top + 18.0f, hero.right - 18.0f, hero.top + 44.0f),
+         a.engineReady ? L"引擎在线" : L"引擎离线", a.engineReady);
+
+    button(a, ID_QUICK, R(hero.left + 18.0f, hero.top + 88.0f, hero.left + 128.0f, hero.top + 116.0f),
+           L"快速扫描", true, a.engineReady && !a.scanning.load());
+    button(a, ID_PICK_FILE, R(hero.left + 138.0f, hero.top + 88.0f, hero.left + 248.0f, hero.top + 116.0f),
+           L"选择文件", false, a.engineReady && !a.scanning.load());
+    button(a, ID_PICK_FOLDER, R(hero.left + 258.0f, hero.top + 88.0f, hero.left + 378.0f, hero.top + 116.0f),
+           L"选择文件夹", false, a.engineReady && !a.scanning.load());
+
+    /* 统计 */
+    y = hero.bottom + 14.0f;
+    float gap = 12.0f;
+    float cw = (l.contentW - gap * 2.0f) / 3.0f;
+    struct Stat { const wchar_t *label; std::wstring value; const wchar_t *sub; };
+    Stat st[3] = {
+        {L"病毒库", std::to_wstring(a.dbCount), L"条外部特征"},
+        {L"隔离区", std::to_wstring(a.quarantine.size()), L"个隔离文件"},
+        {L"历史记录", std::to_wstring(a.history.size()), L"条扫描记录"}
+    };
+    for (int i = 0; i < 3; i++) {
+        D2D1_RECT_F r = R(l.contentL + i * (cw + gap), y, l.contentL + i * (cw + gap) + cw, y + 72.0f);
+        card(a, r);
+        text(a, st[i].label, R(r.left + 14.0f, r.top + 8.0f, r.right - 14.0f, r.top + 26.0f),
+             a.theme.text3, a.gfx.fSmall);
+        text(a, st[i].value, R(r.left + 14.0f, r.top + 24.0f, r.right - 14.0f, r.top + 54.0f),
+             a.theme.text, a.gfx.fStat);
+        text(a, st[i].sub, R(r.left + 14.0f, r.top + 52.0f, r.right - 14.0f, r.top + 68.0f),
+             a.theme.text3, a.gfx.fSmall);
+    }
+
+    /* 硬件环境检测 */
+    y += 72.0f + 14.0f;
+    D2D1_RECT_F hw = R(l.contentL, y, l.contentR, y + 156.0f);
+    card(a, hw);
+    text(a, L"硬件环境检测", R(hw.left + 18.0f, hw.top + 12.0f, hw.right - 120.0f, hw.top + 34.0f),
+         a.theme.text, a.gfx.fH3);
+    button(a, ID_HW_REFRESH, R(hw.right - 100.0f, hw.top + 10.0f, hw.right - 18.0f, hw.top + 38.0f),
+           L"刷新", false, a.engineReady);
+
+    std::wstring sgx = a.hwReady ? (a.hw.sgx ? L"支持" : L"不支持") : L"不可用";
+    std::wstring pt = a.hwReady ? (a.hw.pt ? L"支持" : L"不支持") : L"不可用";
+    std::wstring tpm;
+    if (!a.hwReady) tpm = L"不可用";
+    else if (a.hw.tpm20) tpm = L"TPM 2.0 已启用";
+    else if (a.hw.tpm_version == 12) tpm = L"仅 TPM 1.2";
+    else tpm = L"未检测到 / 未启用";
+    std::wstring hv = a.hwReady ? (a.hw.hypervisor ? L"是（虚拟机）" : L"否（物理机）") : L"不可用";
+
+    struct HW { const wchar_t *label; std::wstring value; const wchar_t *src; };
+    HW hwv[4] = {
+        {L"Intel SGX", sgx, L"CPUID.7:EBX[2]"},
+        {L"Intel PT", pt, L"CPUID.7:EBX[25]"},
+        {L"TPM 2.0", tpm, L"TBS Tbsi_GetDeviceInfo"},
+        {L"虚拟化环境", hv, L"CPUID.1:ECX[31]"}
+    };
+    float colW = (rw(hw) - 36.0f) / 2.0f;
+    for (int i = 0; i < 4; i++) {
+        int cx = i % 2;
+        int cy = i / 2;
+        D2D1_RECT_F r = R(hw.left + 18.0f + cx * (colW + 12.0f),
+                          hw.top + 44.0f + cy * 48.0f,
+                          hw.left + 18.0f + cx * (colW + 12.0f) + colW,
+                          hw.top + 44.0f + cy * 48.0f + 42.0f);
+        fill_rect(a, r, a.theme.card2, 6.0f);
+        text(a, hwv[i].label, R(r.left + 10.0f, r.top + 4.0f, r.right - 10.0f, r.top + 22.0f),
+             a.theme.text3, a.gfx.fSmall);
+        text(a, hwv[i].value, R(r.left + 10.0f, r.top + 20.0f, r.right - 10.0f, r.top + 40.0f),
+             a.theme.text, a.gfx.fBody);
+        text(a, hwv[i].src, R(r.left + 10.0f, r.top + 38.0f, r.right - 10.0f, r.top + 50.0f),
+             a.theme.text3, a.gfx.fSmall);
+    }
+    if (a.hwReady && a.hw.detail[0]) {
+        text(a, u8(a.hw.detail), R(hw.left + 18.0f, hw.bottom - 22.0f, hw.right - 18.0f, hw.bottom - 6.0f),
+             a.theme.text3, a.gfx.fSmall);
+    }
+
+    /* 最近活动 */
+    y += 156.0f + 14.0f;
+    float listBottom = l.h - PAD;
+    if (listBottom - y < 44.0f) return;
+    D2D1_RECT_F hist = R(l.contentL, y, l.contentR, listBottom);
+    card(a, hist);
+    text(a, L"最近活动", R(hist.left + 18.0f, hist.top + 10.0f, hist.right - 120.0f, hist.top + 32.0f),
+         a.theme.text, a.gfx.fH3);
+    button(a, ID_VIEW_HISTORY, R(hist.right - 100.0f, hist.top + 8.0f, hist.right - 18.0f, hist.top + 34.0f),
+           L"查看全部", false, true);
+
+    float hy = hist.top + 40.0f;
+    int shown = 0;
+    for (size_t i = 0; i < a.history.size() && shown < 4; i++, shown++) {
+        if (hy + 28.0f > hist.bottom - 6.0f) break;
+        const HistoryEntry &h = a.history[i];
+        text(a, h.time, R(hist.left + 18.0f, hy, hist.left + 156.0f, hy + 24.0f), a.theme.text3, a.gfx.fSmall);
+        chip(a, R(hist.left + 160.0f, hy + 2.0f, hist.left + 218.0f, hy + 22.0f), bracket_short(h.bracket), h.level >= 2);
+        text(a, elide(h.path, 64), R(hist.left + 228.0f, hy, hist.right - 18.0f, hy + 24.0f),
+             a.theme.text2, a.gfx.fSmall);
+        hy += 28.0f;
+    }
+    if (a.history.empty()) {
+        draw_empty(a, R(hist.left, hist.top + 34.0f, hist.right, hist.bottom), L"暂无活动记录", L"完成一次扫描后会在这里显示");
+    }
+}
+
+static void draw_protection(App &a, const Layout &l) {
+    float y = l.bodyTop;
+
+    /* 工具栏 */
+    button(a, ID_QUICK, R(l.contentL, y, l.contentL + 100.0f, y + 34.0f), L"快速扫描", true,
+           a.engineReady && !a.scanning.load());
+    button(a, ID_PICK_FILE, R(l.contentL + 108.0f, y, l.contentL + 208.0f, y + 34.0f), L"选择文件", false,
+           a.engineReady && !a.scanning.load());
+    button(a, ID_PICK_FOLDER, R(l.contentL + 216.0f, y, l.contentL + 326.0f, y + 34.0f), L"选择文件夹", false,
+           a.engineReady && !a.scanning.load());
+    button(a, ID_STOP, R(l.contentL + 334.0f, y, l.contentL + 414.0f, y + 34.0f), L"停止", false,
+           a.scanning.load());
+    button(a, ID_CLEAR, R(l.contentR - 76.0f, y, l.contentR, y + 34.0f), L"清空", false,
+           !a.scanning.load() && !a.results.empty());
+
+    /* 扫描状态 */
+    y += 44.0f;
+    D2D1_RECT_F st = R(l.contentL, y, l.contentR, y + 64.0f);
+    card(a, st);
+    std::wstring title;
+    std::wstring sub;
+    if (a.scanning.load()) {
+        title = L"正在扫描";
+        sub = elide(a.currentFile, 80);
+    } else if (a.scanFinished) {
+        title = a.scanCanceled ? L"扫描已停止" : L"扫描完成";
+        sub = L"文件 " + std::to_wstring(a.stats.files) + L" · 高危 " + std::to_wstring(a.stats.high) +
+              L" · 疑似 " + std::to_wstring(a.stats.suspicious) + L" · 跳过 " + std::to_wstring(a.stats.skipped);
+    } else {
+        title = L"准备就绪";
+        sub = L"选择文件/文件夹，或把文件拖入窗口";
+    }
+    text(a, title, R(st.left + 16.0f, st.top + 8.0f, st.right - 220.0f, st.top + 30.0f),
+         a.theme.text, a.gfx.fH3);
+    text(a, sub, R(st.left + 16.0f, st.top + 31.0f, st.right - 16.0f, st.top + 52.0f),
+         a.theme.text2, a.gfx.fSmall);
+
+    float barY = st.bottom - 10.0f;
+    fill_rect(a, R(st.left + 16.0f, barY, st.right - 16.0f, barY + 3.0f), a.theme.track, 2.0f);
+    if (a.scanning.load()) {
+        float full = rw(st) - 32.0f;
+        float t = (float)((GetTickCount64() / 8) % 1000) / 1000.0f;
+        float bw = full * 0.32f;
+        float x = st.left + 16.0f + (full - bw) * t;
+        fill_rect(a, R(x, barY, x + bw, barY + 3.0f), a.theme.accent, 2.0f);
+    } else if (a.scanFinished) {
+        fill_rect(a, R(st.left + 16.0f, barY, st.right - 16.0f, barY + 3.0f), a.theme.accent, 2.0f);
+    }
+
+    /* 结果表 */
+    y += 74.0f;
+    float c0 = l.contentL + 14.0f;
+    float c1 = c0 + 92.0f;
+    float c2 = l.contentR - 14.0f - 150.0f - 56.0f - 84.0f;
+    float c3 = c2 + 84.0f;
+    float c4 = c3 + 56.0f;
+    float c5 = l.contentR - 14.0f;
+    D2D1_RECT_F head = R(l.contentL, y, l.contentR, y + 30.0f);
+    fill_rect(a, head, a.theme.card2, 6.0f);
+    text(a, L"结论", R(c0, head.top, c1, head.bottom), a.theme.text3, a.gfx.fSmall);
+    text(a, L"文件", R(c1, head.top, c2, head.bottom), a.theme.text3, a.gfx.fSmall);
+    text(a, L"层级", R(c2, head.top, c3, head.bottom), a.theme.text3, a.gfx.fSmall);
+    text(a, L"分数", R(c3, head.top, c4, head.bottom), a.theme.text3, a.gfx.fSmall);
+    text(a, L"检测名", R(c4, head.top, c5, head.bottom), a.theme.text3, a.gfx.fSmall);
+
+    float listTop = y + 34.0f;
+    float listBottom = l.h - 72.0f;
+    D2D1_RECT_F list = R(l.contentL, listTop, l.contentR, listBottom);
+    a.viewScanH = rh(list);
+    float maxScroll = std::max(0.0f, (float)a.results.size() * ROW_H - a.viewScanH);
+    if (a.scrollScan > maxScroll) a.scrollScan = maxScroll;
+
+    a.gfx.rt->PushAxisAlignedClip(list, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    for (size_t i = 0; i < a.results.size(); i++) {
+        float ry = listTop + (float)i * ROW_H - a.scrollScan;
+        if (ry + ROW_H < listTop) continue;
+        if (ry > listBottom) break;
+        const ScanEntry &e = a.results[i];
+        D2D1_RECT_F row = R(l.contentL, ry, l.contentR, ry + ROW_H - 2.0f);
+        if ((int)i == a.selectedResult) fill_rect(a, row, a.theme.accentSoft, 6.0f);
+        else if (a.hoverId == ID_RESULT_ROW + (int)i) fill_rect(a, row, a.theme.hover, 6.0f);
+        chip(a, R(c0, ry + 8.0f, c0 + 70.0f, ry + 30.0f), bracket_short(u8(e.r.bracket)), e.level >= 2);
+        text(a, elide(e.path, 72), R(c1, ry, c2 - 6.0f, ry + ROW_H), a.theme.text, a.gfx.fSmall);
+        text(a, u8(e.r.layer), R(c2, ry, c3 - 4.0f, ry + ROW_H), a.theme.text3, a.gfx.fSmall);
+        wchar_t sc[32];
+        if (e.r.score < 0) swprintf(sc, 32, L"-");
+        else swprintf(sc, 32, L"%.1f", e.r.score);
+        text(a, sc, R(c3, ry, c4 - 4.0f, ry + ROW_H), a.theme.text2, a.gfx.fSmall);
+        std::wstring caro = u8(e.r.caro);
+        if (e.quarantined) caro = caro.empty() ? L"已隔离" : (caro + L" · 已隔离");
+        text(a, elide(caro, 22), R(c4, ry, c5, ry + ROW_H), a.theme.text3, a.gfx.fSmall);
+        a.hits.push_back({ID_RESULT_ROW + (int)i, row});
+    }
+    a.gfx.rt->PopAxisAlignedClip();
 
     if (a.results.empty()) {
-        icon(a, a.scanning.load() ? L"\uE895" : L"\uE721",
-             R(res.left + l.cw * 0.5f - 28, listTop + 34, res.left + l.cw * 0.5f + 28, listTop + 90),
-             a.theme.text3, a.gfx.fIconBig);
-        txt(a, a.scanning.load() ? L"正在扫描…" : L"暂无扫描结果",
-            R(res.left + 20, listTop + 96, res.right - 20, listTop + 122),
-            a.gfx.fH3, a.theme.text2, DWRITE_TEXT_ALIGNMENT_CENTER);
-        txt(a, a.scanning.load() ? L"结果会实时出现在这里" : L"选择一个文件或文件夹开始扫描",
-            R(res.left + 20, listTop + 122, res.right - 20, listTop + 144),
-            a.gfx.fSmall, a.theme.text3, DWRITE_TEXT_ALIGNMENT_CENTER);
-    } else {
-        a.gfx.rt->PushAxisAlignedClip(R(res.left, listTop, res.right, listBottom),
-                                      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-        for (int i = 0; i < (int)a.results.size(); i++) {
-            float y = listTop + i * rowH - a.scrollScan;
-            if (y + rowH < listTop || y > listBottom) continue;
-            const ScanEntry &e = a.results[(size_t)i];
-            int rid = ID_ROW_RESULT + i;
-            D2D1_RECT_F rr = R(res.left + 10, y + 2, res.right - 12, y + rowH - 4);
-            bool sel = i == a.selectedResult;
-            bool hov = a.hoverId == rid;
-            if (sel) fr(a, rr, 8.0f, a.theme.accentSoft);
-            else if (hov) fr(a, rr, 8.0f, a.theme.hover);
-            a.hits.push_back({rid, rr});
-
-            D2D1_RECT_F icr = R(rr.left + 10, y + 10, rr.left + 44, y + 44);
-            fr(a, icr, 9.0f, level_bg(a, e.level));
-            icon(a, level_glyph(e.level), icr, level_fg(a, e.level));
-
-            std::wstring nm = base_name(e.path);
-            txt(a, nm.empty() ? e.path : nm,
-                R(rr.left + 54, y + 7, rr.right - 280, y + 29), a.gfx.fBody, a.theme.text);
-            std::wstring sub = e.path;
-            if (e.r.caro[0]) sub = from_u8(e.r.caro) + L"  ·  " + sub;
-            txt(a, sub, R(rr.left + 54, y + 29, rr.right - 280, y + 48),
-                a.gfx.fSmall, a.theme.text3);
-
-            if (e.quarantined) {
-                D2D1_RECT_F qr = R(rr.right - 268, y + 14, rr.right - 178, y + 38);
-                chip(a, qr, L"已隔离", a.theme.success, a.theme.successSoft);
-            }
-            D2D1_RECT_F br = R(rr.right - 170, y + 14, rr.right - 68, y + 38);
-            chip(a, br, level_name(e.level), level_fg(a, e.level), level_bg(a, e.level));
-            txt(a, score_text(e.r.score), R(rr.right - 64, y + 10, rr.right - 12, y + 40),
-                a.gfx.fBody, a.theme.text2, DWRITE_TEXT_ALIGNMENT_TRAILING,
-                DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-        a.gfx.rt->PopAxisAlignedClip();
-        scrollbar(a, R(res.right - 18, listTop, res.right - 8, listBottom),
-                  a.scrollScan, contentH, viewH);
+        draw_empty(a, list, L"暂无扫描结果", L"选择文件或文件夹开始扫描");
     }
+
+    bool selOk = a.selectedResult >= 0 && a.selectedResult < (int)a.results.size();
+    bool canQuar = selOk && a.results[(size_t)a.selectedResult].level >= 2 &&
+                   !a.results[(size_t)a.selectedResult].quarantined;
+    button(a, ID_QUAR_SEL, R(l.contentL, l.h - 54.0f, l.contentL + 116.0f, l.h - 22.0f),
+           L"隔离选中", true, canQuar);
+    button(a, ID_OPEN_SEL, R(l.contentL + 124.0f, l.h - 54.0f, l.contentL + 240.0f, l.h - 22.0f),
+           L"打开位置", false, selOk);
+    text(a, L"提示：选中疑似/高危项后可隔离；隔离会移动并加密文件。",
+         R(l.contentL + 252.0f, l.h - 54.0f, l.contentR, l.h - 22.0f), a.theme.text3, a.gfx.fSmall,
+         DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 }
 
-/* ---------------- 防护页 ---------------- */
-static void draw_protection(App &a, const Layout &l) {
-    draw_header(a, l, L"防护", L"当前为手动扫描模式；常驻防护需要服务与驱动");
-
-    D2D1_RECT_F banner = R(l.cx, 96, l.cx + l.cw, 172);
-    card(a, banner);
-    D2D1_RECT_F bi = R(banner.left + 18, banner.top + 18, banner.left + 54, banner.top + 54);
-    fr(a, bi, 9.0f, a.theme.warningSoft);
-    icon(a, L"\uE7BA", bi, a.theme.warning);
-    txt(a, L"当前没有常驻防护", R(banner.left + 68, banner.top + 16, banner.right - 220, banner.top + 40),
-        a.gfx.fH2, a.theme.text);
-    txt(a, L"扫描判定全部在用户态完成；实时监控、强杀、强删与自保护需要后台服务和驱动。",
-        R(banner.left + 68, banner.top + 42, banner.right - 220, banner.top + 66),
-        a.gfx.fSmall, a.theme.text2);
-    D2D1_RECT_F bb = R(banner.right - 190, banner.top + 24, banner.right - 18, banner.top + 60);
-    button(a, ID_PROT_DRIVER, bb, L"查看驱动状态", false, false, true, L"\uE7EF");
-
-    float gap = 16;
-    float cw = (l.cw - gap) * 0.5f;
-    float ch = 150;
-    struct CardDef {
-        const wchar_t *glyph;
-        const wchar_t *title;
-        const wchar_t *status;
-        const wchar_t *desc;
-        int lv;
-        bool toggle;
-        bool enabled;
-    };
-    CardDef defs[4] = {
-        {L"\uEA18", L"实时文件保护", L"未启用",
-         L"需要后台服务常驻监控新文件；当前版本只在手动扫描时分析。", 2, true, false},
-        {L"\uE9D2", L"行为监控", L"已封存",
-         L"pe_vm 虚拟执行不并入 DLL，默认关闭，避免把“无法定论”当成恶意。", 5, true, false},
-        {L"\uE7EF", L"驱动自保护", a.driverState.c_str(), L"执行端只负责强杀、强删与自保护；判定仍在用户态。",
-         a.driverState == L"运行中" ? 1 : 2, false, false},
-        {L"\uE823", L"计划扫描", L"未启用",
-         L"计划任务、空闲扫描与通知将在服务化阶段加入。", 5, true, false}
-    };
-
-    for (int i = 0; i < 4; i++) {
-        int col = i % 2, row = i / 2;
-        D2D1_RECT_F c = R(l.cx + col * (cw + gap), 190 + row * (ch + gap),
-                          l.cx + col * (cw + gap) + cw, 190 + row * (ch + gap) + ch);
-        card(a, c);
-        D2D1_RECT_F ic = R(c.left + 18, c.top + 18, c.left + 50, c.top + 50);
-        fr(a, ic, 8.0f, level_bg(a, defs[i].lv));
-        icon(a, defs[i].glyph, ic, level_fg(a, defs[i].lv));
-        txt(a, defs[i].title, R(c.left + 62, c.top + 16, c.right - 120, c.top + 38),
-            a.gfx.fH3, a.theme.text);
-        D2D1_RECT_F st = R(c.left + 62, c.top + 40, c.left + 146, c.top + 62);
-        chip(a, st, defs[i].status, level_fg(a, defs[i].lv), level_bg(a, defs[i].lv));
-        txt(a, defs[i].desc, R(c.left + 18, c.top + 72, c.right - 18, c.top + 112),
-            a.gfx.fSmall, a.theme.text2);
-        if (defs[i].toggle) {
-            D2D1_RECT_F tr = R(c.right - 58, c.top + 20, c.right - 18, c.top + 40);
-            toggle(a, tr, false, false);
-        }
-        if (i == 2) {
-            D2D1_RECT_F b = R(c.left + 18, c.bottom - 42, c.left + 150, c.bottom - 12);
-            button(a, ID_PROT_DRIVER, b, L"驱动与内核", false, false, true, L"\uE7EF");
-        }
-    }
-
-    float iy = 190 + 2 * ch + gap + 16;
-    if (iy + 48 <= l.H - 26) {
-        D2D1_RECT_F info = R(l.cx, iy, l.cx + l.cw, l.H - 26);
-        card(a, info);
-        txt(a, L"边界说明", R(info.left + 18, info.top + 10, info.right - 18, info.top + 32),
-            a.gfx.fBody, a.theme.text);
-        const wchar_t *lines[] = {
-            L"静态扫描不执行样本；实时保护/驱动未启用时，不拦截、不修改文件。",
-            L"隔离区是用户主动操作：文件移动到 quarantine 目录，可恢复或永久删除。",
-            L"驱动只做执行端；PPL 进程、被映射/占用文件、内核级攻击存在能力边界。",
-            L"加壳文件给出 [PACKED]，不直接判恶意；静态扫描不等于沙箱行为分析。"
-        };
-        float yy2 = info.top + 32;
-        for (const wchar_t *s : lines) {
-            if (yy2 + 20 > info.bottom - 2) break;
-            txt(a, s, R(info.left + 18, yy2, info.right - 18, yy2 + 20),
-                a.gfx.fSmall, a.theme.text2);
-            yy2 += 22;
-        }
-    }
-}
-
-/* ---------------- 隔离区 ---------------- */
 static void draw_quarantine(App &a, const Layout &l) {
-    draw_header(a, l, L"隔离区", L"已隔离文件可以恢复或永久删除");
+    float y = l.bodyTop;
+    text(a, L"共 " + std::to_wstring(a.quarantine.size()) + L" 项",
+         R(l.contentL, y, l.contentR - 260.0f, y + 34.0f), a.theme.text2, a.gfx.fBody,
+         DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    button(a, ID_RESTORE, R(l.contentR - 252.0f, y, l.contentR - 136.0f, y + 34.0f), L"恢复选中", true,
+           a.selectedQuar >= 0 && a.selectedQuar < (int)a.quarantine.size());
+    button(a, ID_DELETE, R(l.contentR - 128.0f, y, l.contentR - 68.0f, y + 34.0f), L"删除", false,
+           a.selectedQuar >= 0 && a.selectedQuar < (int)a.quarantine.size());
+    button(a, ID_QUAR_REFRESH, R(l.contentR - 60.0f, y, l.contentR, y + 34.0f), L"刷新", false, true);
 
-    D2D1_RECT_F rf = R(l.cx, 96, l.cx + 84, 130);
-    D2D1_RECT_F rs = R(l.cx + 92, 96, l.cx + 204, 130);
-    D2D1_RECT_F rd = R(l.cx + 212, 96, l.cx + 324, 130);
-    button(a, ID_QUAR_REFRESH, rf, L"刷新", false, false, true, L"\uE72C");
-    bool sel = a.selectedQuar >= 0 && a.selectedQuar < (int)a.quarantine.size();
-    button(a, ID_QUAR_RESTORE, rs, L"恢复选中", false, false, sel);
-    button(a, ID_QUAR_DELETE, rd, L"删除选中", false, true, sel);
+    y += 44.0f;
+    float q0 = l.contentL + 14.0f;
+    float q1 = q0 + 148.0f;
+    float q2 = l.contentR - 14.0f - 150.0f - 96.0f;
+    float q3 = q2 + 96.0f;
+    float q4 = l.contentR - 14.0f;
+    D2D1_RECT_F head = R(l.contentL, y, l.contentR, y + 30.0f);
+    fill_rect(a, head, a.theme.card2, 6.0f);
+    text(a, L"隔离时间", R(q0, head.top, q1, head.bottom), a.theme.text3, a.gfx.fSmall);
+    text(a, L"原路径", R(q1, head.top, q2, head.bottom), a.theme.text3, a.gfx.fSmall);
+    text(a, L"结论", R(q2, head.top, q3, head.bottom), a.theme.text3, a.gfx.fSmall);
+    text(a, L"检测名", R(q3, head.top, q4, head.bottom), a.theme.text3, a.gfx.fSmall);
 
-    txt(a, L"共 " + std::to_wstring(a.quarantine.size()) + L" 项",
-        R(l.cx + l.cw - 160, 100, l.cx + l.cw, 128), a.gfx.fBody, a.theme.text2,
-        DWRITE_TEXT_ALIGNMENT_TRAILING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    float listTop = y + 34.0f;
+    float listBottom = l.h - 72.0f;
+    D2D1_RECT_F list = R(l.contentL, listTop, l.contentR, listBottom);
+    a.viewQuarH = rh(list);
+    float maxScroll = std::max(0.0f, (float)a.quarantine.size() * ROW_H - a.viewQuarH);
+    if (a.scrollQuar > maxScroll) a.scrollQuar = maxScroll;
 
-    D2D1_RECT_F table = R(l.cx, 146, l.cx + l.cw, l.H - 26);
-    card(a, table);
-    float colTime = table.left + 18;
-    float colPath = table.left + 190;
-    float colVerdict = table.right - 350;
-    float colCaro = table.right - 180;
-    txt(a, L"隔离时间", R(colTime, table.top + 14, colPath - 10, table.top + 34),
-        a.gfx.fSmall, a.theme.text3);
-    txt(a, L"原路径", R(colPath, table.top + 14, colVerdict - 10, table.top + 34),
-        a.gfx.fSmall, a.theme.text3);
-    txt(a, L"结论", R(colVerdict, table.top + 14, colCaro - 10, table.top + 34),
-        a.gfx.fSmall, a.theme.text3);
-    txt(a, L"检测名", R(colCaro, table.top + 14, table.right - 18, table.top + 34),
-        a.gfx.fSmall, a.theme.text3);
-    line(a, table.left + 18, table.top + 42, table.right - 18, table.top + 42, a.theme.border, 1.0f);
-
-    float listTop = table.top + 50;
-    float listBottom = table.bottom - 10;
-    float viewH = std::max(20.0f, listBottom - listTop);
-    const float rowH = 54.0f;
-    float contentH = (float)a.quarantine.size() * rowH;
-    float maxScroll = std::max(0.0f, contentH - viewH);
-    a.scrollQuar = std::max(0.0f, std::min(a.scrollQuar, maxScroll));
-
+    a.gfx.rt->PushAxisAlignedClip(list, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    for (size_t i = 0; i < a.quarantine.size(); i++) {
+        float ry = listTop + (float)i * ROW_H - a.scrollQuar;
+        if (ry + ROW_H < listTop) continue;
+        if (ry > listBottom) break;
+        const QuarantineEntry &q = a.quarantine[i];
+        D2D1_RECT_F row = R(l.contentL, ry, l.contentR, ry + ROW_H - 2.0f);
+        if ((int)i == a.selectedQuar) fill_rect(a, row, a.theme.accentSoft, 6.0f);
+        else if (a.hoverId == ID_QUAR_ROW + (int)i) fill_rect(a, row, a.theme.hover, 6.0f);
+        text(a, q.time, R(q0, ry, q1 - 6.0f, ry + ROW_H), a.theme.text3, a.gfx.fSmall);
+        text(a, elide(q.original, 58), R(q1, ry, q2 - 6.0f, ry + ROW_H), a.theme.text, a.gfx.fSmall);
+        chip(a, R(q2, ry + 8.0f, q2 + 76.0f, ry + 30.0f), bracket_short(q.bracket), false);
+        text(a, elide(q.caro, 22), R(q3, ry, q4, ry + ROW_H), a.theme.text3, a.gfx.fSmall);
+        a.hits.push_back({ID_QUAR_ROW + (int)i, row});
+    }
+    a.gfx.rt->PopAxisAlignedClip();
     if (a.quarantine.empty()) {
-        icon(a, L"\uE74D", R(table.left + l.cw * 0.5f - 28, listTop + 36,
-                            table.left + l.cw * 0.5f + 28, listTop + 92),
-             a.theme.text3, a.gfx.fIconBig);
-        txt(a, L"隔离区为空", R(table.left + 20, listTop + 98, table.right - 20, listTop + 124),
-            a.gfx.fH3, a.theme.text2, DWRITE_TEXT_ALIGNMENT_CENTER);
-        txt(a, L"在扫描结果中选中疑似/高危文件，点击“隔离选中”。",
-            R(table.left + 20, listTop + 124, table.right - 20, listTop + 146),
-            a.gfx.fSmall, a.theme.text3, DWRITE_TEXT_ALIGNMENT_CENTER);
-    } else {
-        a.gfx.rt->PushAxisAlignedClip(R(table.left, listTop, table.right, listBottom),
-                                      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-        for (int i = 0; i < (int)a.quarantine.size(); i++) {
-            float y = listTop + i * rowH - a.scrollQuar;
-            if (y + rowH < listTop || y > listBottom) continue;
-            const QuarantineEntry &q = a.quarantine[(size_t)i];
-            int id = ID_ROW_QUAR + i;
-            D2D1_RECT_F rr = R(table.left + 10, y + 2, table.right - 12, y + rowH - 4);
-            if (i == a.selectedQuar) fr(a, rr, 8.0f, a.theme.accentSoft);
-            else if (a.hoverId == id) fr(a, rr, 8.0f, a.theme.hover);
-            a.hits.push_back({id, rr});
-            txt(a, q.time, R(colTime, y + 8, colPath - 10, y + 28), a.gfx.fSmall, a.theme.text3);
-            txt(a, base_name(q.original), R(colPath, y + 5, colVerdict - 10, y + 25),
-                a.gfx.fBody, a.theme.text);
-            txt(a, q.original, R(colPath, y + 25, colVerdict - 10, y + 45),
-                a.gfx.fSmall, a.theme.text3);
-            D2D1_RECT_F br = R(colVerdict, y + 13, colVerdict + 160, y + 37);
-            chip(a, br, q.bracket.empty() ? L"隔离" : q.bracket,
-                 a.theme.danger, a.theme.dangerSoft);
-            txt(a, q.caro.empty() ? L"—" : q.caro,
-                R(colCaro, y + 10, table.right - 18, y + 40), a.gfx.fSmall, a.theme.text2,
-                DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-        a.gfx.rt->PopAxisAlignedClip();
-        scrollbar(a, R(table.right - 18, listTop, table.right - 8, listBottom),
-                  a.scrollQuar, contentH, viewH);
+        draw_empty(a, list, L"隔离区为空", L"在扫描结果中选中疑似/高危文件，点击“隔离选中”");
     }
+
+    text(a, L"QTN1 轻量加密（XOR 0x5A）· 恢复时自动解密 · 旧明文 .qtn 仍可恢复",
+         R(l.contentL, l.h - 54.0f, l.contentR, l.h - 22.0f), a.theme.text3, a.gfx.fSmall,
+         DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 }
 
-/* ---------------- 日志 ---------------- */
-static void draw_logs(App &a, const Layout &l) {
-    draw_header(a, l, L"日志", L"扫描发现与摘要，保存在 logs\\history.tsv");
+static void draw_history(App &a, const Layout &l) {
+    float y = l.bodyTop;
+    text(a, L"共 " + std::to_wstring(a.history.size()) + L" 条",
+         R(l.contentL, y, l.contentR - 360.0f, y + 34.0f), a.theme.text2, a.gfx.fBody,
+         DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    button(a, ID_HIST_REFRESH, R(l.contentR - 352.0f, y, l.contentR - 276.0f, y + 34.0f), L"刷新", true, true);
+    button(a, ID_HIST_CLEAR, R(l.contentR - 268.0f, y, l.contentR - 160.0f, y + 34.0f), L"清空", false,
+           !a.history.empty());
+    button(a, ID_OPEN_LOGS, R(l.contentR - 152.0f, y, l.contentR, y + 34.0f), L"打开日志目录", false, true);
 
-    D2D1_RECT_F rf = R(l.cx, 96, l.cx + 84, 130);
-    D2D1_RECT_F rc = R(l.cx + 92, 96, l.cx + 204, 130);
-    D2D1_RECT_F ro = R(l.cx + 212, 96, l.cx + 344, 130);
-    button(a, ID_LOG_REFRESH, rf, L"刷新", false, false, true, L"\uE72C");
-    button(a, ID_LOG_CLEAR, rc, L"清空日志", false, true, !a.history.empty());
-    button(a, ID_LOG_OPEN, ro, L"打开日志目录", false, false, true, L"\uE838");
-    txt(a, L"共 " + std::to_wstring(a.history.size()) + L" 条",
-        R(l.cx + l.cw - 160, 100, l.cx + l.cw, 128), a.gfx.fBody, a.theme.text2,
-        DWRITE_TEXT_ALIGNMENT_TRAILING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    y += 44.0f;
+    float h0 = l.contentL + 14.0f;
+    float h1 = h0 + 140.0f;
+    float h2 = l.contentR - 14.0f;
+    D2D1_RECT_F head = R(l.contentL, y, l.contentR, y + 30.0f);
+    fill_rect(a, head, a.theme.card2, 6.0f);
+    text(a, L"时间 / 结论", R(h0, head.top, h1, head.bottom), a.theme.text3, a.gfx.fSmall);
+    text(a, L"文件 / 详情", R(h1, head.top, h2, head.bottom), a.theme.text3, a.gfx.fSmall);
 
-    D2D1_RECT_F table = R(l.cx, 146, l.cx + l.cw, l.H - 26);
-    card(a, table);
-    float colTime = table.left + 18;
-    float colPath = table.left + 190;
-    float colVerdict = table.right - 340;
-    float colScore = table.right - 90;
-    txt(a, L"时间", R(colTime, table.top + 14, colPath - 10, table.top + 34),
-        a.gfx.fSmall, a.theme.text3);
-    txt(a, L"路径 / 范围", R(colPath, table.top + 14, colVerdict - 10, table.top + 34),
-        a.gfx.fSmall, a.theme.text3);
-    txt(a, L"结论", R(colVerdict, table.top + 14, colScore - 10, table.top + 34),
-        a.gfx.fSmall, a.theme.text3);
-    txt(a, L"评分", R(colScore, table.top + 14, table.right - 18, table.top + 34),
-        a.gfx.fSmall, a.theme.text3, DWRITE_TEXT_ALIGNMENT_TRAILING);
-    line(a, table.left + 18, table.top + 42, table.right - 18, table.top + 42, a.theme.border, 1.0f);
+    float listTop = y + 34.0f;
+    float listBottom = l.h - 24.0f;
+    D2D1_RECT_F list = R(l.contentL, listTop, l.contentR, listBottom);
+    a.viewLogH = rh(list);
+    float maxScroll = std::max(0.0f, (float)a.history.size() * HIST_ROW_H - a.viewLogH);
+    if (a.scrollLog > maxScroll) a.scrollLog = maxScroll;
 
-    float listTop = table.top + 50;
-    float listBottom = table.bottom - 10;
-    float viewH = std::max(20.0f, listBottom - listTop);
-    const float rowH = 56.0f;
-    float contentH = (float)a.history.size() * rowH;
-    float maxScroll = std::max(0.0f, contentH - viewH);
-    a.scrollLog = std::max(0.0f, std::min(a.scrollLog, maxScroll));
-
+    a.gfx.rt->PushAxisAlignedClip(list, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    for (size_t i = 0; i < a.history.size(); i++) {
+        float ry = listTop + (float)i * HIST_ROW_H - a.scrollLog;
+        if (ry + HIST_ROW_H < listTop) continue;
+        if (ry > listBottom) break;
+        const HistoryEntry &h = a.history[i];
+        D2D1_RECT_F row = R(l.contentL, ry, l.contentR, ry + HIST_ROW_H - 2.0f);
+        if ((int)i == a.selectedLog) fill_rect(a, row, a.theme.accentSoft, 6.0f);
+        else if (a.hoverId == ID_HIST_ROW + (int)i) fill_rect(a, row, a.theme.hover, 6.0f);
+        text(a, h.time, R(h0, ry + 4.0f, h0 + 132.0f, ry + 24.0f), a.theme.text3, a.gfx.fSmall);
+        chip(a, R(h0 + 136.0f, ry + 4.0f, h0 + 196.0f, ry + 24.0f), bracket_short(h.bracket), h.level >= 2);
+        text(a, elide(h.path, 80), R(h1, ry + 2.0f, h2, ry + 24.0f), a.theme.text, a.gfx.fSmall);
+        std::wstring detail = h.detail;
+        if (detail.empty()) detail = h.caro;
+        text(a, elide(detail, 120), R(h1, ry + 24.0f, h2, ry + 46.0f), a.theme.text3, a.gfx.fSmall);
+        a.hits.push_back({ID_HIST_ROW + (int)i, row});
+    }
+    a.gfx.rt->PopAxisAlignedClip();
     if (a.history.empty()) {
-        icon(a, L"\uE9D9", R(table.left + l.cw * 0.5f - 28, listTop + 36,
-                            table.left + l.cw * 0.5f + 28, listTop + 92),
-             a.theme.text3, a.gfx.fIconBig);
-        txt(a, L"暂无日志", R(table.left + 20, listTop + 98, table.right - 20, listTop + 124),
-            a.gfx.fH3, a.theme.text2, DWRITE_TEXT_ALIGNMENT_CENTER);
-        txt(a, L"完成一次扫描后，这里会出现摘要与威胁记录。",
-            R(table.left + 20, listTop + 124, table.right - 20, listTop + 146),
-            a.gfx.fSmall, a.theme.text3, DWRITE_TEXT_ALIGNMENT_CENTER);
-    } else {
-        a.gfx.rt->PushAxisAlignedClip(R(table.left, listTop, table.right, listBottom),
-                                      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-        for (int i = 0; i < (int)a.history.size(); i++) {
-            float y = listTop + i * rowH - a.scrollLog;
-            if (y + rowH < listTop || y > listBottom) continue;
-            const HistoryEntry &h = a.history[(size_t)i];
-            int id = ID_ROW_LOG + i;
-            D2D1_RECT_F rr = R(table.left + 10, y + 2, table.right - 12, y + rowH - 4);
-            if (i == a.selectedLog) fr(a, rr, 8.0f, a.theme.accentSoft);
-            else if (a.hoverId == id) fr(a, rr, 8.0f, a.theme.hover);
-            a.hits.push_back({id, rr});
-            txt(a, h.time, R(colTime, y + 8, colPath - 10, y + 28), a.gfx.fSmall, a.theme.text3);
-            txt(a, base_name(h.path), R(colPath, y + 5, colVerdict - 10, y + 25),
-                a.gfx.fBody, a.theme.text);
-            txt(a, h.detail.empty() ? h.path : h.detail,
-                R(colPath, y + 25, colVerdict - 10, y + 47), a.gfx.fSmall, a.theme.text3);
-            D2D1_RECT_F br = R(colVerdict, y + 15, colVerdict + 160, y + 39);
-            chip(a, br, h.bracket.empty() ? L"—" : h.bracket,
-                 level_fg(a, h.level), level_bg(a, h.level));
-            std::wstring sc = score_text(h.score);
-            txt(a, sc, R(colScore, y + 12, table.right - 18, y + 42),
-                a.gfx.fBody, a.theme.text2, DWRITE_TEXT_ALIGNMENT_TRAILING,
-                DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-        a.gfx.rt->PopAxisAlignedClip();
-        scrollbar(a, R(table.right - 18, listTop, table.right - 8, listBottom),
-                  a.scrollLog, contentH, viewH);
+        draw_empty(a, list, L"暂无历史记录", L"完成扫描或处置后，记录会写入 logs\\history.tsv");
     }
 }
 
-/* ---------------- 驱动与内核 ---------------- */
-static void draw_driver(App &a, const Layout &l) {
-    draw_header(a, l, L"驱动与内核", L"执行端状态、能力边界与安装前提");
-
-    D2D1_RECT_F main = R(l.cx, 96, l.cx + l.cw, 278);
-    card(a, main);
-    bool running = a.driverState == L"运行中";
-    D2D1_RECT_F ic = R(main.left + 24, main.top + 28, main.left + 88, main.top + 92);
-    fr(a, ic, 14.0f, running ? a.theme.successSoft : a.theme.warningSoft);
-    icon(a, L"\uE7EF", ic, running ? a.theme.success : a.theme.warning, a.gfx.fIconBig);
-    txt(a, L"MalwareScannerDrv", R(main.left + 108, main.top + 24, main.right - 220, main.top + 54),
-        a.gfx.fH1, a.theme.text);
-    D2D1_RECT_F st = R(main.left + 108, main.top + 60, main.left + 208, main.top + 84);
-    chip(a, st, a.driverState, running ? a.theme.success : a.theme.warning,
-         running ? a.theme.successSoft : a.theme.warningSoft, a.gfx.fButton);
-    txt(a, a.driverDetail, R(main.left + 108, main.top + 94, main.right - 220, main.top + 116),
-        a.gfx.fSmall, a.theme.text2);
-
-    D2D1_RECT_F rb = R(main.right - 200, main.top + 22, main.right - 18, main.top + 58);
-    D2D1_RECT_F ob = R(main.right - 200, main.top + 66, main.right - 18, main.top + 102);
-    button(a, ID_DRV_REFRESH, rb, L"刷新状态", false, false, true, L"\uE72C");
-    button(a, ID_DRV_OPEN_DATA, ob, L"打开数据目录", false, false, true, L"\uE838");
-
-    txt(a, L"驱动只做执行端：强制结束进程、强制删除文件、保护自身进程与文件。",
-        R(main.left + 24, main.top + 130, main.right - 24, main.top + 154),
-        a.gfx.fBody, a.theme.text2);
-    txt(a, L"扫描判定始终在用户态；驱动不暴露任意内核读写，也不参与“是不是恶意”的判断。",
-        R(main.left + 24, main.top + 158, main.right - 24, main.top + 182),
-        a.gfx.fSmall, a.theme.text3);
-
-    float gap = 16;
-    float cw = (l.cw - gap * 2) / 3;
-    const wchar_t *titles[3] = {L"强杀进程", L"强删文件", L"自我保护"};
-    const wchar_t *desc[3] = {
-        L"对普通进程可强制结束；PPL 进程受系统保护。",
-        L"被映射/占用的文件可能只能重启后删除。",
-        L"保护服务与驱动自身；挡不住内核级攻击。"
-    };
-    const wchar_t *glyphs[3] = {L"\uE71A", L"\uE74D", L"\uEA18"};
-    for (int i = 0; i < 3; i++) {
-        D2D1_RECT_F c = R(l.cx + i * (cw + gap), 296, l.cx + i * (cw + gap) + cw, 296 + 132);
-        card(a, c);
-        D2D1_RECT_F gi = R(c.left + 18, c.top + 18, c.left + 50, c.top + 50);
-        fr(a, gi, 8.0f, a.theme.accentSoft);
-        icon(a, glyphs[i], gi, a.theme.accent);
-        txt(a, titles[i], R(c.left + 62, c.top + 17, c.right - 18, c.top + 39),
-            a.gfx.fH3, a.theme.text);
-        D2D1_RECT_F st2 = R(c.right - 86, c.top + 18, c.right - 18, c.top + 40);
-        chip(a, st2, L"未提供", a.theme.text3, a.theme.hover);
-        txt(a, desc[i], R(c.left + 18, c.top + 62, c.right - 18, c.top + 112),
-            a.gfx.fSmall, a.theme.text2);
-    }
-
-    D2D1_RECT_F boundary = R(l.cx, 446, l.cx + l.cw, l.H - 26);
-    card(a, boundary);
-    txt(a, L"为什么现在不装驱动", R(boundary.left + 18, boundary.top + 14,
-                                     boundary.right - 18, boundary.top + 38),
-        a.gfx.fH2, a.theme.text);
-    const wchar_t *lines[] = {
-        L"• 驱动需要 WHQL/attestation 签名和 minifilter altitude，当前交付不含未签名驱动。",
-        L"• 没有签名就加载内核驱动会触发系统策略，也可能破坏机器；不拿用户机做实验。",
-        L"• 服务化后会先提供维护模式与卸载路径，再接入强杀/强删/自保护。",
-        L"• 现阶段 GUI 的扫描、隔离、日志全部由用户态 scanner.dll 完成。"
-    };
-    float yy = boundary.top + 52;
-    for (const wchar_t *s : lines) {
-        if (yy + 24 > boundary.bottom - 10) break;
-        txt(a, s, R(boundary.left + 18, yy, boundary.right - 18, yy + 24),
-            a.gfx.fBody, a.theme.text2);
-        yy += 30;
-    }
+static void settings_label(App &a, float x, float y, float w, const std::wstring &label) {
+    text(a, label, R(x, y, x + 170.0f, y + 30.0f), a.theme.text2, a.gfx.fBody,
+         DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    (void)w;
 }
 
-/* ---------------- 设置 ---------------- */
 static void draw_settings(App &a, const Layout &l) {
-    draw_header(a, l, L"设置", L"外观、扫描限制、病毒库与数据位置");
-
-    float gap = 16;
-    float leftW = (l.cw - gap) * 0.55f;
-    float rightW = l.cw - gap - leftW;
-    float cardH = 150;
+    float y = l.bodyTop;
+    float inner = l.contentW - 36.0f;
 
     /* 外观 */
-    D2D1_RECT_F look = R(l.cx, 96, l.cx + leftW, 96 + cardH);
-    card(a, look);
-    txt(a, L"外观", R(look.left + 18, look.top + 14, look.right - 18, look.top + 38),
-        a.gfx.fH2, a.theme.text);
-    txt(a, L"主题跟随系统，或强制浅色/深色。", R(look.left + 18, look.top + 40, look.right - 18, look.top + 60),
-        a.gfx.fSmall, a.theme.text3);
-    D2D1_RECT_F seg = R(look.left + 18, look.top + 70, look.right - 18, look.top + 108);
-    fr(a, seg, 9.0f, a.theme.input);
-    sr(a, seg, 9.0f, a.theme.border, 1.0f);
-    const wchar_t *tn[3] = {L"跟随系统", L"浅色", L"深色"};
-    float segW = (seg.right - seg.left - 8) / 3.0f;
-    for (int i = 0; i < 3; i++) {
-        D2D1_RECT_F sb = R(seg.left + 4 + i * segW, seg.top + 4,
-                           seg.left + 4 + (i + 1) * segW - 2, seg.bottom - 4);
-        bool act = a.settings.theme == i;
-        if (act) fr(a, sb, 7.0f, a.theme.accent);
-        txt(a, tn[i], sb, a.gfx.fButton, act ? a.theme.white : a.theme.text2,
-            DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        a.hits.push_back({ID_SET_THEME_SYS + i, sb});
-    }
-    txt(a, L"平滑过渡动画", R(look.left + 18, look.top + 120, look.right - 100, look.top + 146),
-        a.gfx.fBody, a.theme.text2, DWRITE_TEXT_ALIGNMENT_LEADING,
-        DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-    D2D1_RECT_F at = R(look.right - 70, look.top + 122, look.right - 30, look.top + 142);
-    toggle(a, at, a.settings.animations != 0, true);
-    a.hits.push_back({ID_SET_ANIM, R(at.left - 8, at.top - 8, at.right + 8, at.bottom + 8)});
+    D2D1_RECT_F c1 = R(l.contentL, y, l.contentR, y + 116.0f);
+    card(a, c1);
+    text(a, L"外观", R(c1.left + 18.0f, c1.top + 10.0f, c1.right - 18.0f, c1.top + 34.0f),
+         a.theme.text, a.gfx.fH3);
+    settings_label(a, c1.left + 18.0f, c1.top + 40.0f, inner, L"主题");
+    button(a, ID_THEME_SYS, R(c1.left + 196.0f, c1.top + 40.0f, c1.left + 300.0f, c1.top + 70.0f),
+           L"跟随系统", a.settings.theme == 0, true);
+    button(a, ID_THEME_LIGHT, R(c1.left + 308.0f, c1.top + 40.0f, c1.left + 388.0f, c1.top + 70.0f),
+           L"浅色", a.settings.theme == 1, true);
+    button(a, ID_THEME_DARK, R(c1.left + 396.0f, c1.top + 40.0f, c1.left + 476.0f, c1.top + 70.0f),
+           L"深色", a.settings.theme == 2, true);
+    settings_label(a, c1.left + 18.0f, c1.top + 76.0f, inner, L"动画");
+    button(a, ID_ANIM, R(c1.left + 196.0f, c1.top + 76.0f, c1.left + 296.0f, c1.top + 106.0f),
+           a.settings.animations ? L"开启" : L"关闭", a.settings.animations != 0, true);
 
-    /* 扫描限制 */
-    D2D1_RECT_F scan = R(l.cx, 260, l.cx + leftW, 260 + cardH);
-    card(a, scan);
-    txt(a, L"扫描", R(scan.left + 18, scan.top + 14, scan.right - 18, scan.top + 38),
-        a.gfx.fH2, a.theme.text);
-    txt(a, L"超过大小限制的文件会跳过，不进入引擎。", R(scan.left + 18, scan.top + 40, scan.right - 18, scan.top + 60),
-        a.gfx.fSmall, a.theme.text3);
-    txt(a, L"最大扫描文件", R(scan.left + 18, scan.top + 74, scan.right - 190, scan.top + 102),
-        a.gfx.fBody, a.theme.text2, DWRITE_TEXT_ALIGNMENT_LEADING,
-        DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-    D2D1_RECT_F minus = R(scan.right - 178, scan.top + 74, scan.right - 146, scan.top + 104);
-    D2D1_RECT_F value = R(scan.right - 140, scan.top + 72, scan.right - 66, scan.top + 106);
-    D2D1_RECT_F plus = R(scan.right - 60, scan.top + 74, scan.right - 28, scan.top + 104);
-    auto smallbtn = [&](int id, const D2D1_RECT_F &r, const wchar_t *g) {
-        bool hov = a.hoverId == id;
-        fr(a, r, 7.0f, hov ? a.theme.cardHover : a.theme.card2);
-        sr(a, r, 7.0f, a.theme.border, 1.0f);
-        icon(a, g, r, a.theme.text2);
-        a.hits.push_back({id, r});
-    };
-    smallbtn(ID_SET_MAX_MINUS, minus, L"\uE738");
-    smallbtn(ID_SET_MAX_PLUS, plus, L"\uE710");
-    fr(a, value, 7.0f, a.theme.card2);
-    sr(a, value, 7.0f, a.theme.border, 1.0f);
-    txt(a, std::to_wstring(a.settings.maxMb) + L" MB", value, a.gfx.fButton, a.theme.text,
-        DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    /* 扫描 */
+    y = c1.bottom + 12.0f;
+    D2D1_RECT_F c2 = R(l.contentL, y, l.contentR, y + 116.0f);
+    card(a, c2);
+    text(a, L"扫描", R(c2.left + 18.0f, c2.top + 10.0f, c2.right - 18.0f, c2.top + 34.0f),
+         a.theme.text, a.gfx.fH3);
+    settings_label(a, c2.left + 18.0f, c2.top + 40.0f, inner, L"最大扫描文件");
+    text(a, std::to_wstring(a.settings.maxMb) + L" MB",
+         R(c2.left + 196.0f, c2.top + 40.0f, c2.left + 300.0f, c2.top + 70.0f),
+         a.theme.text, a.gfx.fBody, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    button(a, ID_MAX_MINUS, R(c2.left + 306.0f, c2.top + 40.0f, c2.left + 342.0f, c2.top + 70.0f), L"-", false, true);
+    button(a, ID_MAX_PLUS, R(c2.left + 350.0f, c2.top + 40.0f, c2.left + 386.0f, c2.top + 70.0f), L"+", false, true);
+    settings_label(a, c2.left + 18.0f, c2.top + 76.0f, inner, L"病毒库");
+    text(a, std::to_wstring(a.dbCount) + L" 条",
+         R(c2.left + 196.0f, c2.top + 76.0f, c2.left + 300.0f, c2.top + 106.0f),
+         a.theme.text, a.gfx.fBody, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    button(a, ID_DB_RELOAD, R(c2.left + 306.0f, c2.top + 76.0f, c2.left + 386.0f, c2.top + 106.0f), L"重载", false, true);
+    button(a, ID_OPEN_DATA, R(c2.left + 394.0f, c2.top + 76.0f, c2.left + 510.0f, c2.top + 106.0f),
+           L"打开数据目录", false, true);
 
-    txt(a, L"扫描在线程中串行调用 scanner.dll；可在“扫描”页随时停止。",
-        R(scan.left + 18, scan.top + 118, scan.right - 18, scan.top + 146),
-        a.gfx.fSmall, a.theme.text3);
-
-    /* 病毒库 */
-    D2D1_RECT_F db = R(l.cx + leftW + gap, 96, l.cx + l.cw, 96 + cardH);
-    card(a, db);
-    txt(a, L"病毒库", R(db.left + 18, db.top + 14, db.right - 18, db.top + 38),
-        a.gfx.fH2, a.theme.text);
-    txt(a, std::to_wstring(a.dbCount), R(db.left + 18, db.top + 40, db.left + 110, db.top + 76),
-        a.gfx.fStat, a.theme.text);
-    txt(a, L"条特征", R(db.left + 18, db.top + 78, db.left + 110, db.top + 98),
-        a.gfx.fSmall, a.theme.text3);
-    std::wstring dp = a.dbPath.empty() ? L"未找到 signatures.db（使用 DLL 内置兜底表）" : a.dbPath;
-    txt(a, dp, R(db.left + 18, db.top + 96, db.right - 18, db.top + 112),
-        a.gfx.fSmall, a.dbPath.empty() ? a.theme.warning : a.theme.text3);
-    D2D1_RECT_F rl = R(db.left + 18, db.bottom - 34, db.left + 128, db.bottom - 6);
-    D2D1_RECT_F od = R(db.left + 136, db.bottom - 34, db.left + 240, db.bottom - 6);
-    button(a, ID_SET_RELOAD, rl, L"重新加载", false, false, true, L"\uE72C");
-    button(a, ID_SET_OPEN, od, L"打开目录", false, false, true, L"\uE838");
+    /* 内核执行端 */
+    y = c2.bottom + 12.0f;
+    D2D1_RECT_F c3 = R(l.contentL, y, l.contentR, y + 104.0f);
+    card(a, c3);
+    text(a, L"内核执行端（HIPS）", R(c3.left + 18.0f, c3.top + 10.0f, c3.right - 120.0f, c3.top + 34.0f),
+         a.theme.text, a.gfx.fH3);
+    chip(a, R(c3.right - 128.0f, c3.top + 10.0f, c3.right - 18.0f, c3.top + 34.0f), a.driverState, a.driverState == L"运行中");
+    text(a, a.driverDetail, R(c3.left + 18.0f, c3.top + 40.0f, c3.right - 128.0f, c3.top + 62.0f),
+         a.theme.text3, a.gfx.fSmall);
+    button(a, ID_DRV_REFRESH, R(c3.right - 128.0f, c3.top + 64.0f, c3.right - 18.0f, c3.top + 92.0f),
+           L"刷新状态", false, true);
+    text(a, L"驱动设备 ACL 仅允许 SYSTEM；本机不加载未签名驱动，测试只在 VM 快照内进行。",
+         R(c3.left + 18.0f, c3.top + 64.0f, c3.right - 140.0f, c3.top + 92.0f),
+         a.theme.text3, a.gfx.fSmall);
 
     /* 关于 */
-    D2D1_RECT_F about = R(l.cx + leftW + gap, 260, l.cx + l.cw, 260 + cardH);
-    card(a, about);
-    txt(a, L"关于", R(about.left + 18, about.top + 14, about.right - 18, about.top + 38),
-        a.gfx.fH2, a.theme.text);
-    txt(a, L"恶意软件扫描器 · 静态扫描 GUI", R(about.left + 18, about.top + 42, about.right - 18, about.top + 62),
-        a.gfx.fBody, a.theme.text2);
-    txt(a, L"引擎 " + a.engineVersion + L"  ·  ABI " + std::to_wstring(a.abiVersion),
-        R(about.left + 18, about.top + 70, about.right - 18, about.top + 92),
-        a.gfx.fSmall, a.theme.text3);
-    txt(a, L"判定阈值：≥ 80 高危，≥ 50 疑似；样本绝不执行。",
-        R(about.left + 18, about.top + 90, about.right - 18, about.top + 108),
-        a.gfx.fSmall, a.theme.text3);
-    D2D1_RECT_F ab = R(about.left + 18, about.bottom - 34, about.left + 148, about.bottom - 6);
-    button(a, ID_SET_OPEN, ab, L"打开数据目录", false, false, true, L"\uE838");
-
-    /* 数据与边界 */
-    float ny = 260 + cardH + gap;
-    D2D1_RECT_F note = R(l.cx, ny, l.cx + l.cw, l.H - 26);
-    card(a, note);
-    txt(a, L"数据与边界", R(note.left + 18, note.top + 14, note.right - 18, note.top + 38),
-        a.gfx.fH2, a.theme.text);
-    std::wstring data = scanner_data_dir();
-    txt(a, L"数据目录  " + data, R(note.left + 18, note.top + 42, note.right - 18, note.top + 62),
-        a.gfx.fSmall, a.theme.text2);
-    txt(a, L"日志  logs\\history.tsv    ·    隔离区  quarantine\\index.tsv    ·    设置  config\\settings.ini",
-        R(note.left + 18, note.top + 64, note.right - 18, note.top + 84),
-        a.gfx.fSmall, a.theme.text3);
-    if (note.bottom - note.top >= 240) {
-        line(a, note.left + 18, note.top + 104, note.right - 18, note.top + 104, a.theme.border, 1.0f);
-        const wchar_t *notes[] = {
-            L"• 当前版本不安装驱动、不常驻监控、不修改系统策略；扫描与隔离均为用户主动操作。",
-            L"• 外部 signatures.db 优先；缺失时使用 DLL 内置 53 条特征表兜底。",
-            L"• 隔离是移动文件，不加密、不压缩；系统文件可能因权限或占用而失败。",
-            L"• 静态扫描不执行样本；加壳判定使用熵与节区特征，不等同于恶意。"
-        };
-        float yy = note.top + 118;
-        for (const wchar_t *s : notes) {
-            txt(a, s, R(note.left + 18, yy, note.right - 18, yy + 24),
-                a.gfx.fBody, a.theme.text2);
-            yy += 30;
-        }
-    } else {
-        txt(a, L"• 当前版本不安装驱动、不常驻监控；扫描与隔离为用户主动操作。",
-            R(note.left + 18, note.top + 90, note.right - 18, note.top + 110),
-            a.gfx.fSmall, a.theme.text2);
-        txt(a, L"• 静态扫描不执行样本；隔离是移动文件，可恢复或永久删除。",
-            R(note.left + 18, note.top + 110, note.right - 18, note.top + 130),
-            a.gfx.fSmall, a.theme.text2);
-    }
+    y = c3.bottom + 12.0f;
+    D2D1_RECT_F c4 = R(l.contentL, y, l.contentR, y + 128.0f);
+    card(a, c4);
+    text(a, L"关于", R(c4.left + 18.0f, c4.top + 10.0f, c4.right - 18.0f, c4.top + 34.0f),
+         a.theme.text, a.gfx.fH3);
+    text(a, L"扫描引擎  " + a.engineVersion + L"    ABI " + std::to_wstring(a.abiVersion),
+         R(c4.left + 18.0f, c4.top + 40.0f, c4.right - 18.0f, c4.top + 62.0f),
+         a.theme.text2, a.gfx.fSmall);
+    text(a, L"数据目录  " + scanner_data_dir(),
+         R(c4.left + 18.0f, c4.top + 62.0f, c4.right - 18.0f, c4.top + 84.0f),
+         a.theme.text3, a.gfx.fSmall);
+    text(a, L"边界：静态扫描、手动隔离、历史记录；不含实时监控、自动处置或未签名驱动加载。",
+         R(c4.left + 18.0f, c4.top + 88.0f, c4.right - 18.0f, c4.top + 112.0f),
+         a.theme.text3, a.gfx.fSmall);
 }
 
-/* ---------------- 页面调度 / 提示 ---------------- */
 static void draw_toast(App &a, const Layout &l) {
-    ULONGLONG now = GetTickCount64();
-    if (a.toast.empty() || now >= a.toastUntil) return;
-    float remain = (float)(a.toastUntil - now);
-    float alpha = (remain < 260.0f) ? remain / 260.0f : 1.0f;
-    float w = std::min(520.0f, l.cw - 40.0f);
-    D2D1_RECT_F r = R(l.cx + l.cw - w, l.H - 82, l.cx + l.cw - 8, l.H - 34);
-    fr(a, r, 10.0f, C(0x1B1B1B, 0.92f * alpha));
-    D2D1_RECT_F ic = R(r.left + 12, r.top + 9, r.left + 38, r.bottom - 9);
-    icon(a, L"\uE946", ic, C(0xFFFFFF, alpha), a.gfx.fIcon);
-    txt(a, a.toast, R(r.left + 44, r.top, r.right - 14, r.bottom), a.gfx.fBody,
-        C(0xFFFFFF, alpha), DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    if (a.toast.empty() || GetTickCount64() >= a.toastUntil) return;
+    float w = std::min(460.0f, l.contentW - 40.0f);
+    D2D1_RECT_F r = R((l.w - w) * 0.5f, l.h - 46.0f, (l.w + w) * 0.5f, l.h - 12.0f);
+    fill_rect(a, r, a.theme.accent, 6.0f);
+    text(a, a.toast, R(r.left + 14.0f, r.top, r.right - 14.0f, r.bottom),
+         a.theme.dark ? a.theme.black : a.theme.white, a.gfx.fSmall,
+         DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 }
+
+static void open_location(const std::wstring &path) {
+    if (path.empty()) return;
+    std::wstring args = L"/select,\"" + path + L"\"";
+    ShellExecuteW(NULL, L"open", L"explorer.exe", args.c_str(), NULL, SW_SHOWNORMAL);
+}
+
+} // namespace
 
 void ui_draw(App &a) {
+    if (!a.gfx.rt) return;
     a.hits.clear();
+    Layout l = make_layout(a);
     a.gfx.begin();
-    if (!a.gfx.rt) { a.gfx.end(); return; }
-
-    Layout l = layout_of(a);
-    a.gfx.rt->Clear(a.theme.bg1);
-    rect(a, R(0, 0, l.W, l.H), a.theme.bg1);
-    D2D1_ELLIPSE e1 = D2D1::Ellipse(D2D1::Point2F(l.W - 40, 20), 360, 260);
-    a.gfx.brush->SetColor(C(0x0078D4, a.theme.dark ? 0.035f : 0.045f));
-    a.gfx.rt->FillEllipse(e1, a.gfx.brush);
-    D2D1_ELLIPSE e2 = D2D1::Ellipse(D2D1::Point2F(l.sb + 120, l.H - 20), 300, 220);
-    a.gfx.brush->SetColor(C(0x4CC2FF, a.theme.dark ? 0.025f : 0.035f));
-    a.gfx.rt->FillEllipse(e2, a.gfx.brush);
-
+    fill_rect(a, R(0, 0, l.w, l.h), a.theme.bg1);
     draw_sidebar(a, l);
-
-    float t = 1.0f;
-    if (a.animating && a.settings.animations) {
-        t = (float)(GetTickCount64() - a.pageAnimStart) / 190.0f;
-        if (t >= 1.0f) { t = 1.0f; a.animating = false; }
-    } else {
-        a.animating = false;
-    }
-    float ease = 1.0f - std::pow(1.0f - t, 3.0f);
-    float off = (1.0f - ease) * 10.0f;
-    a.gfx.rt->SetTransform(D2D1::Matrix3x2F::Translation(off, 0));
-
+    draw_header(a, l);
     switch (a.page) {
-        case Page::Home: draw_home(a, l); break;
-        case Page::Scan: draw_scan(a, l); break;
-        case Page::Protection: draw_protection(a, l); break;
-        case Page::Quarantine: draw_quarantine(a, l); break;
-        case Page::Logs: draw_logs(a, l); break;
-        case Page::Driver: draw_driver(a, l); break;
-        case Page::Settings: draw_settings(a, l); break;
-        default: draw_home(a, l); break;
+    case Page::Overview:   draw_overview(a, l); break;
+    case Page::Protection: draw_protection(a, l); break;
+    case Page::Quarantine: draw_quarantine(a, l); break;
+    case Page::History:    draw_history(a, l); break;
+    case Page::Settings:   draw_settings(a, l); break;
+    default: break;
     }
-    a.gfx.rt->SetTransform(D2D1::Matrix3x2F::Identity());
     draw_toast(a, l);
     a.gfx.end();
 }
 
-/* ---------------- 交互 ---------------- */
-static void open_path(const std::wstring &path, bool select) {
-    if (path.empty()) return;
-    if (select) {
-        std::wstring args = L"/select,\"" + path + L"\"";
-        ShellExecuteW(NULL, L"open", L"explorer.exe", args.c_str(), NULL, SW_SHOWNORMAL);
-    } else {
-        ShellExecuteW(NULL, L"open", path.c_str(), NULL, NULL, SW_SHOWNORMAL);
-    }
-}
+void ui_on_click(App &a, int id, float x, float y) {
+    (void)x;
+    (void)y;
 
-static void open_selected_result(App &a) {
-    if (a.selectedResult < 0 || a.selectedResult >= (int)a.results.size()) return;
-    open_path(a.results[(size_t)a.selectedResult].path, true);
-}
-
-static void open_logs_dir() {
-    std::wstring d = scanner_data_dir() + L"\\logs";
-    CreateDirectoryW(d.c_str(), NULL);
-    ShellExecuteW(NULL, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL);
-}
-
-static void cycle_max_mb(App &a, int dir) {
-    static const int vals[] = {64, 128, 256, 512, 1024, 2048};
-    int n = (int)(sizeof(vals) / sizeof(vals[0]));
-    int idx = 0;
-    int best = 0x7fffffff;
-    for (int i = 0; i < n; i++) {
-        int d = vals[i] - a.settings.maxMb;
-        if (d < 0) d = -d;
-        if (d < best) { best = d; idx = i; }
-    }
-    idx += dir;
-    if (idx < 0) idx = 0;
-    if (idx >= n) idx = n - 1;
-    a.settings.maxMb = vals[idx];
-    scanner_save_settings();
-    a.show_toast(L"最大扫描文件：" + std::to_wstring(a.settings.maxMb) + L" MB");
-}
-
-void ui_on_click(App &a, int id, float, float) {
-    if (id >= ID_NAV_HOME && id <= ID_NAV_SETTINGS) {
-        a.page = (Page)(id - ID_NAV_HOME);
-        if (a.page == Page::Quarantine && a.selectedQuar < 0 && !a.quarantine.empty())
-            a.selectedQuar = 0;
+    if (id >= ID_NAV_OVERVIEW && id <= ID_NAV_SETTINGS) {
+        a.page = (Page)(id - ID_NAV_OVERVIEW);
         a.start_page_anim();
-        a.hoverId = 0;
-        InvalidateRect(a.hwnd, NULL, FALSE);
+        return;
+    }
+    if (id >= ID_RESULT_ROW && id < ID_RESULT_ROW + 10000) {
+        a.selectedResult = id - ID_RESULT_ROW;
+        return;
+    }
+    if (id >= ID_QUAR_ROW && id < ID_QUAR_ROW + 10000) {
+        a.selectedQuar = id - ID_QUAR_ROW;
+        return;
+    }
+    if (id >= ID_HIST_ROW && id < ID_HIST_ROW + 10000) {
+        a.selectedLog = id - ID_HIST_ROW;
         return;
     }
 
     switch (id) {
-        case ID_HEADER_STATUS:
-            a.page = Page::Protection;
-            a.start_page_anim();
-            break;
-        case ID_HOME_QUICK:
-            a.page = Page::Scan;
-            a.start_page_anim();
-            scan_quick();
-            break;
-        case ID_HOME_CUSTOM:
-            a.page = Page::Scan;
-            a.start_page_anim();
-            pick_and_scan_folder();
-            break;
-        case ID_HOME_VIEW_LOGS:
-            a.page = Page::Logs;
-            a.start_page_anim();
-            break;
-        case ID_HOME_PROTECT:
-            a.page = Page::Protection;
-            a.start_page_anim();
-            break;
+    case ID_QUICK:
+        scan_quick();
+        break;
+    case ID_PICK_FILE:
+        pick_and_scan_file();
+        break;
+    case ID_PICK_FOLDER:
+        pick_and_scan_folder();
+        break;
+    case ID_STOP:
+        scanner_cancel();
+        a.show_toast(L"已请求停止扫描");
+        break;
+    case ID_CLEAR:
+        scanner_clear_results();
+        break;
+    case ID_QUAR_SEL:
+        scanner_quarantine_selected();
+        break;
+    case ID_OPEN_SEL:
+        if (a.selectedResult >= 0 && a.selectedResult < (int)a.results.size())
+            open_location(a.results[(size_t)a.selectedResult].path);
+        break;
+    case ID_HW_REFRESH:
+        scanner_refresh_hardware();
+        a.show_toast(L"硬件环境已刷新");
+        break;
+    case ID_VIEW_HISTORY:
+        a.page = Page::History;
+        a.start_page_anim();
+        break;
 
-        case ID_SCAN_FILE:
-            pick_and_scan_file();
-            break;
-        case ID_SCAN_DIR:
-            pick_and_scan_folder();
-            break;
-        case ID_SCAN_QUICK:
-            scan_quick();
-            break;
-        case ID_SCAN_START:
-            if (a.scanning.load()) {
-                scanner_cancel();
-            } else if (a.scanPath.empty()) {
-                scan_quick();
-            } else {
-                scan_path_async(a.scanPath);
-            }
-            break;
-        case ID_SCAN_CLEAR:
-            if (a.scanning.load()) {
-                a.show_toast(L"扫描进行中，请先停止再清空");
-            } else {
-                a.results.clear();
-                a.stats = ScanStats();
-                a.selectedResult = -1;
-                a.scrollScan = 0;
-                a.scanFinished = false;
-                a.scanCanceled = false;
-                a.show_toast(L"已清空本次结果");
-            }
-            break;
-        case ID_SCAN_QUARANTINE:
-            scanner_quarantine_selected();
-            break;
-        case ID_SCAN_OPEN:
-            open_selected_result(a);
-            break;
+    case ID_RESTORE:
+        scanner_restore_selected();
+        break;
+    case ID_DELETE:
+        scanner_delete_selected();
+        break;
+    case ID_QUAR_REFRESH:
+        scanner_load_quarantine();
+        a.show_toast(L"隔离区已刷新");
+        break;
 
-        case ID_PROT_DRIVER:
-            a.page = Page::Driver;
-            a.start_page_anim();
-            break;
+    case ID_HIST_REFRESH:
+        scanner_load_history();
+        a.show_toast(L"历史记录已刷新");
+        break;
+    case ID_HIST_CLEAR:
+        scanner_clear_history();
+        break;
+    case ID_OPEN_LOGS:
+        open_log_dir();
+        break;
 
-        case ID_QUAR_REFRESH:
-            scanner_load_quarantine();
-            a.selectedQuar = a.quarantine.empty() ? -1 : 0;
-            a.scrollQuar = 0;
-            a.show_toast(L"隔离区已刷新");
-            break;
-        case ID_QUAR_RESTORE:
-            scanner_restore_selected();
-            break;
-        case ID_QUAR_DELETE:
-            scanner_delete_selected();
-            break;
-
-        case ID_LOG_REFRESH:
-            scanner_load_history();
-            a.selectedLog = -1;
-            a.scrollLog = 0;
-            a.show_toast(L"日志已刷新");
-            break;
-        case ID_LOG_CLEAR:
-            scanner_clear_history();
-            break;
-        case ID_LOG_OPEN:
-            open_logs_dir();
-            break;
-
-        case ID_DRV_REFRESH:
-            scanner_refresh_driver();
-            a.show_toast(L"驱动状态：" + a.driverState);
-            break;
-        case ID_DRV_OPEN_DATA:
-            open_data_dir();
-            break;
-
-        case ID_SET_THEME_SYS:
-        case ID_SET_THEME_LIGHT:
-        case ID_SET_THEME_DARK: {
-            int mode = id - ID_SET_THEME_SYS;
-            a.settings.theme = mode;
-            a.themeMode = (ThemeMode)mode;
-            apply_theme(true);
-            scanner_save_settings();
-            a.show_toast(L"外观：" + theme_name(mode));
-            break;
-        }
-        case ID_SET_MAX_MINUS:
-            cycle_max_mb(a, -1);
-            break;
-        case ID_SET_MAX_PLUS:
-            cycle_max_mb(a, 1);
-            break;
-        case ID_SET_ANIM:
-            a.settings.animations = a.settings.animations ? 0 : 1;
-            if (!a.settings.animations) a.animating = false;
-            scanner_save_settings();
-            a.show_toast(a.settings.animations ? L"已开启平滑动画" : L"已关闭平滑动画");
-            break;
-        case ID_SET_RELOAD:
-            scanner_db_reload();
-            break;
-        case ID_SET_OPEN:
-            open_data_dir();
-            break;
-
-        default:
-            if (id >= ID_ROW_RESULT && id < ID_ROW_QUAR) {
-                int i = id - ID_ROW_RESULT;
-                if (i >= 0 && i < (int)a.results.size()) {
-                    a.selectedResult = i;
-                    a.show_toast(L"已选择：" + base_name(a.results[(size_t)i].path));
-                }
-            } else if (id >= ID_ROW_QUAR && id < ID_ROW_LOG) {
-                int i = id - ID_ROW_QUAR;
-                if (i >= 0 && i < (int)a.quarantine.size()) {
-                    a.selectedQuar = i;
-                }
-            } else if (id >= ID_ROW_LOG) {
-                int i = id - ID_ROW_LOG;
-                if (i >= 0 && i < (int)a.history.size()) {
-                    a.selectedLog = i;
-                }
-            }
-            break;
+    case ID_THEME_SYS:
+        a.settings.theme = 0;
+        a.themeMode = ThemeMode::System;
+        apply_theme(true);
+        scanner_save_settings();
+        break;
+    case ID_THEME_LIGHT:
+        a.settings.theme = 1;
+        a.themeMode = ThemeMode::Light;
+        apply_theme(true);
+        scanner_save_settings();
+        break;
+    case ID_THEME_DARK:
+        a.settings.theme = 2;
+        a.themeMode = ThemeMode::Dark;
+        apply_theme(true);
+        scanner_save_settings();
+        break;
+    case ID_ANIM:
+        a.settings.animations = a.settings.animations ? 0 : 1;
+        scanner_save_settings();
+        break;
+    case ID_DB_RELOAD:
+        scanner_db_reload();
+        break;
+    case ID_OPEN_DATA:
+        open_data_dir();
+        break;
+    case ID_DRV_REFRESH:
+        scanner_refresh_driver();
+        a.show_toast(L"驱动状态已刷新");
+        break;
+    case ID_MAX_MINUS:
+        a.settings.maxMb = std::max(16, a.settings.maxMb - 16);
+        scanner_save_settings();
+        break;
+    case ID_MAX_PLUS:
+        a.settings.maxMb = std::min(4096, a.settings.maxMb + 16);
+        scanner_save_settings();
+        break;
+    default:
+        break;
     }
-    InvalidateRect(a.hwnd, NULL, FALSE);
 }
 
 void ui_on_move(App &a, float x, float y) {
     int id = a.hit_test(x, y);
     if (id != a.hoverId) {
         a.hoverId = id;
-        InvalidateRect(a.hwnd, NULL, FALSE);
+        if (a.hwnd) InvalidateRect(a.hwnd, NULL, FALSE);
     }
-    SetCursor(LoadCursorW(NULL, id ? IDC_HAND : IDC_ARROW));
 }
 
-void ui_on_wheel(App &a, float, float, int delta) {
-    float step = (float)delta / 120.0f * 56.0f;
-    if (a.page == Page::Scan) {
-        a.scrollScan = std::max(0.0f, a.scrollScan - step);
+void ui_on_wheel(App &a, float x, float y, int delta) {
+    (void)x;
+    (void)y;
+    float step = (delta > 0) ? -60.0f : 60.0f;
+    if (a.page == Page::Protection) {
+        float maxS = std::max(0.0f, (float)a.results.size() * ROW_H - a.viewScanH);
+        a.scrollScan = std::max(0.0f, std::min(maxS, a.scrollScan + step));
     } else if (a.page == Page::Quarantine) {
-        a.scrollQuar = std::max(0.0f, a.scrollQuar - step);
-    } else if (a.page == Page::Logs) {
-        a.scrollLog = std::max(0.0f, a.scrollLog - step);
+        float maxS = std::max(0.0f, (float)a.quarantine.size() * ROW_H - a.viewQuarH);
+        a.scrollQuar = std::max(0.0f, std::min(maxS, a.scrollQuar + step));
+    } else if (a.page == Page::History) {
+        float maxS = std::max(0.0f, (float)a.history.size() * HIST_ROW_H - a.viewLogH);
+        a.scrollLog = std::max(0.0f, std::min(maxS, a.scrollLog + step));
     }
-    InvalidateRect(a.hwnd, NULL, FALSE);
 }
 
 void ui_on_key(App &a, WPARAM key) {
-    bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-    if (ctrl && (key == 'O' || key == 'o')) {
-        a.page = Page::Scan;
-        a.start_page_anim();
-        if (shift) pick_and_scan_folder();
-        else pick_and_scan_file();
+    if (key == VK_ESCAPE) {
+        scanner_cancel();
+        return;
+    }
+    if (key == VK_F5) {
+        scanner_refresh_hardware();
+        scanner_refresh_driver();
+        scanner_db_count();
+        a.show_toast(L"状态已刷新");
+        return;
+    }
+    if (key == VK_DOWN || key == VK_UP) {
+        int d = (key == VK_DOWN) ? 1 : -1;
+        if (a.page == Page::Protection && !a.results.empty()) {
+            int n = (int)a.results.size();
+            a.selectedResult = std::max(0, std::min(n - 1, (a.selectedResult < 0 ? 0 : a.selectedResult) + d));
+        } else if (a.page == Page::Quarantine && !a.quarantine.empty()) {
+            int n = (int)a.quarantine.size();
+            a.selectedQuar = std::max(0, std::min(n - 1, (a.selectedQuar < 0 ? 0 : a.selectedQuar) + d));
+        } else if (a.page == Page::History && !a.history.empty()) {
+            int n = (int)a.history.size();
+            a.selectedLog = std::max(0, std::min(n - 1, (a.selectedLog < 0 ? 0 : a.selectedLog) + d));
+        }
     }
 }
-
-
-
-
-

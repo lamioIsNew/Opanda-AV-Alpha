@@ -37,6 +37,21 @@ typedef int16_t  s16;
 typedef int32_t  s32;
 typedef int64_t  s64;
 
+/* MSVC 没有 GCC 的 __builtin_*；用等价实现补齐（任务 4 的 MSVC 构建需要）。 */
+#ifdef _MSC_VER
+#  include <intrin.h>
+static int pevm_parity(unsigned v) {
+    v ^= v >> 16;
+    v ^= v >> 8;
+    v ^= v >> 4;
+    v &= 0xF;
+    return (0x6996 >> v) & 1;          /* 1 = odd parity，与 __builtin_parity 一致 */
+}
+#  define __builtin_parity(x)   pevm_parity((unsigned)(x))
+#  define __builtin_bswap64(x)  _byteswap_uint64(x)
+#  define __builtin_bswap32(x)  _byteswap_ulong(x)
+#endif
+
 #define VERSION_STR "pe_vm 0.2 (虚拟执行沙盒 · 阶段一/二：x86-32 + x86-64 用户态解释器)"
 
 /* ---------------------------------------------------------------- 输出 ---- */
@@ -2633,10 +2648,48 @@ static const char* unk_api_hint(void) {
     for (int i = 0; i < g_unk_n; i++) o += snprintf(b + o, sizeof(b) - (size_t)o, "%s%s", i ? ", " : "", g_unk_last[i]);
     return b;
 }
+/* 判断“样本跳到假 API 桩”的那条指令是 CALL 还是 JMP。
+ *
+ * 不能只看栈顶：CALL 会压返回地址，JMP [IAT] 尾调用不会。
+ * x32_last_rec() 在每条指令执行前记录 EIP + 前 10 字节；当 EIP 落到桩上时，
+ * 上一条记录就是真正把控制流送进桩的指令。这里只解码它的 opcode/ModRM：
+ *   E8 / 9A / FF /2 /3  -> CALL
+ *   E9 / EB / FF /4 /5 / C3 / C2 / Jcc / loop -> JMP/RET（不压返回地址）
+ */
+static int stub_entry_was_call(void) {
+    long n = g_lastn32;
+    long idx;
+    const u8 *b;
+    int i = 0;
+
+    if (n < 2) return 0;                       /* 入口直接落在桩上：按 JMP 处理 */
+    idx = (n - 2) % XLAST32;
+    if (idx < 0) idx += XLAST32;
+    b = g_last32[idx].b;
+
+    /* 跳过 legacy 前缀（66/67/F0/F2/F3/段前缀），最多到第 8 字节。 */
+    while (i < 8) {
+        u8 p = b[i];
+        if (p == 0x66 || p == 0x67 || p == 0xF0 || p == 0xF2 || p == 0xF3 ||
+            p == 0x2E || p == 0x36 || p == 0x3E || p == 0x26 || p == 0x64 || p == 0x65) {
+            i++;
+        } else {
+            break;
+        }
+    }
+    if (b[i] == 0xE8 || b[i] == 0x9A) return 1; /* call rel32 / call far */
+    if (b[i] == 0xFF) {
+        int reg = (b[i + 1] >> 3) & 7;
+        if (reg == 2 || reg == 3) return 1;     /* call r/m, call far */
+    }
+    return 0;                                   /* jmp / ret / jcc / loop ... */
+}
+
 static int api_dispatch(void) {
     imp_t* im = stub_lookup(EIP);
     if (!im) return 0;
     const char* name = im->name;
+    int from_call = stub_entry_was_call();
     u32 ret = peek32(ESP);
 
     if (!_stricmp(name, "_CorExeMain") || !_stricmp(name, "_CorDllMain")) {
@@ -2652,11 +2705,22 @@ static int api_dispatch(void) {
     g_api_calls++;
     if (fn) fn();
     else { blog("API未实现", "%s!%s -> 返回 0（参数个数未知，按 0 处理；此调用之后栈可能错位）", im->dll, name); EAX = 0; nargs = 0; unk_api_note(name); }
-    if (getenv("PEVM_API_LOG")) fprintf(stderr, "[API] %s -> EAX=0x%X\n", name, (unsigned)EAX);
-    EIP = ret;
-    ESP += 4;                                    /* 弹掉返回地址 */
-    if (nargs > 0) ESP += 4 * (u32)nargs;         /* stdcall：被调方清理参数 */
-    /* nargs == 0：无参数，只需弹返回地址；nargs < 0（写 -1）为 cdecl：参数由调用方清理，这里一律不动 ESP */
+    if (getenv("PEVM_API_LOG"))
+        fprintf(stderr, "[API] %s via %s -> EAX=0x%X ret=0x%X ESP=0x%X nargs=%d\n",
+                name, from_call ? "CALL" : "JMP", (unsigned)EAX, (unsigned)ret, (unsigned)ESP, nargs);
+
+    if (from_call) {
+        EIP = ret;
+        ESP += 4;                                /* CALL：弹掉本次 call 压入的返回地址 */
+        if (nargs > 0) ESP += 4 * (u32)nargs;     /* stdcall：被调方清理参数 */
+        /* nargs == 0：无参数，只需弹返回地址；nargs < 0（写 -1）为 cdecl：参数由调用方清理，这里一律不动 ESP */
+    } else {
+        /* JMP [IAT] 尾调用：本指令没有压入返回地址。
+         * 任务 4 要求不要 ESP += 4，直接恢复 EIP 到栈顶地址。
+         * 同时也不在这里弹 stdcall 参数，否则会把调用方的返回地址留在栈上，
+         * 后续 ret 就会弹出参数（典型是 0x00000002）。 */
+        EIP = peek32(ESP);
+    }
 
     /* jmp [IAT] 这类尾调用：栈顶是我们的返回哨兵 -> 干净收场 */
     if (EIP == EXIT_MAGIC) {
@@ -3004,11 +3068,12 @@ static void xset_pzs(u64 r, int sz) {
     if (r & xmsb(sz)) EFLAGS |= SF;
     if (__builtin_parity((unsigned)(r & 0xFF)) == 0) EFLAGS |= PF;
 }
+/* MSVC 不支持 __int128；以下用 64 位溢出检测等价实现（x86-32 的 sz 最多 4）。 */
 static void xflags_add(u64 a, u64 b, u64 r, int sz) {
     u64 m = xmask(sz); a &= m; b &= m; r &= m;
-    unsigned __int128 s = (unsigned __int128)a + b;
+    u64 s = a + b;
     EFLAGS &= ~(CF | OF | AF);
-    if ((s >> (sz * 8)) != 0) EFLAGS |= CF;
+    if (sz == 8 ? (s < a) : ((s >> (sz * 8)) != 0)) EFLAGS |= CF;
     if (((a ^ r) & (b ^ r)) & xmsb(sz)) EFLAGS |= OF;
     if ((a ^ b ^ r) & 0x10) EFLAGS |= AF;
     xset_pzs(r, sz);
@@ -3023,18 +3088,24 @@ static void xflags_sub(u64 a, u64 b, u64 r, int sz) {
 }
 static void xflags_adc(u64 a, u64 b, u64 r, int sz) {
     u64 m = xmask(sz); a &= m; b &= m; r &= m;
-    unsigned __int128 s = (unsigned __int128)a + b + ((EFLAGS & CF) ? 1 : 0);
+    u64 c = (EFLAGS & CF) ? 1ull : 0ull;
+    u64 s = a + b;
+    int carry = (s < a);
+    u64 s2 = s + c;
+    carry = carry || (s2 < s);
     EFLAGS &= ~(CF | OF | AF);
-    if ((s >> (sz * 8)) != 0) EFLAGS |= CF;
+    if (carry || (sz != 8 && ((s2 >> (sz * 8)) != 0))) EFLAGS |= CF;
     if (((a ^ r) & (b ^ r)) & xmsb(sz)) EFLAGS |= OF;
     if ((a ^ b ^ r) & 0x10) EFLAGS |= AF;
     xset_pzs(r, sz);
 }
 static void xflags_sbb(u64 a, u64 b, u64 r, int sz) {
     u64 m = xmask(sz); a &= m; b &= m; r &= m;
-    unsigned __int128 t = (unsigned __int128)b + ((EFLAGS & CF) ? 1 : 0);
+    u64 c = (EFLAGS & CF) ? 1ull : 0ull;
+    u64 t = b + c;
+    int borrow = (t < b);
     EFLAGS &= ~(CF | OF | AF);
-    if ((unsigned __int128)a < t) EFLAGS |= CF;
+    if (borrow || a < t) EFLAGS |= CF;
     if (((a ^ b) & (a ^ r)) & xmsb(sz)) EFLAGS |= OF;
     if ((a ^ b ^ r) & 0x10) EFLAGS |= AF;
     xset_pzs(r, sz);
@@ -3082,10 +3153,11 @@ static u64 xshift(int sub, u64 v, u8 cnt0, int sz) {
             int c = (EFLAGS & CF) ? 1 : 0;
             int n = (int)(cnt % (bits + 1));
             if (n == 0) return v;
-            unsigned __int128 big = ((unsigned __int128)v << 1) | (unsigned)c;
-            unsigned __int128 all = (((unsigned __int128)1) << (bits + 1)) - 1;
-            unsigned __int128 res = (sub == 2) ? (((big << n) | (big >> (bits + 1 - n))) & all)
-                                               : (((big >> n) | (big << (bits + 1 - n))) & all);
+            /* x86-32 的 sz 最大 4（bits<=32），所以 bits+1<=33，u64 足够。 */
+            u64 big = ((u64)v << 1) | (u64)c;
+            u64 all = (((u64)1) << (bits + 1)) - 1;
+            u64 res = (sub == 2) ? (((big << n) | (big >> (bits + 1 - n))) & all)
+                                 : (((big >> n) | (big << (bits + 1 - n))) & all);
             cf = (int)((res >> bits) & 1);
             r = (u64)res & m;
             of = (sub == 2) ? (int)((((r & xmsb(sz)) ? 1 : 0) ^ cf)) : 0;
@@ -4063,24 +4135,55 @@ static int x64_execute(u8 op, int rex_w, int rex_r, int rex_x, int rex_b) {
         if (sub == 2) { x64_write(&m, ~a & msk); return 1; }
         if (sub == 3) { u64 r = (0 - a) & msk; xflags_sub(0, a, r, sz); x64_write(&m, r); return 1; }
         if (sub == 4) { /* mul */
-            unsigned __int128 p = (unsigned __int128)a * xr(0, sz);
-            if (sz == 8) { X[0] = (u64)p; X[2] = (u64)(p >> 64); EFLAGS &= ~(CF | OF); if ((p >> 64) != 0) EFLAGS |= CF | OF; }
-            else { u64 m2 = xmask(sz * 2 > 8 ? 8 : sz * 2); (void)m2; xw(0, sz, (u64)p & msk); xw(2, sz, ((u64)p >> (sz * 8)) & msk); EFLAGS &= ~(CF | OF); if ((p >> (sz * 8)) != 0) EFLAGS |= CF | OF; }
+            u64 b = xr(0, sz);
+            if (sz == 8) {
+                u64 hi = 0;
+                u64 lo = _umul128(a, b, &hi);
+                X[0] = lo; X[2] = hi;
+                EFLAGS &= ~(CF | OF);
+                if (hi != 0) EFLAGS |= CF | OF;
+            } else {
+                u64 p = a * b;
+                xw(0, sz, p & msk);
+                xw(2, sz, (p >> (sz * 8)) & msk);
+                EFLAGS &= ~(CF | OF);
+                if ((p >> (sz * 8)) != 0) EFLAGS |= CF | OF;
+            }
             return 1;
         }
         if (sub == 5) { /* imul 单操作数 */
             s64 sv = (sz == 8) ? (s64)a : (s64)((a ^ xmsb(sz)) - xmsb(sz));
             s64 sa = (sz == 8) ? (s64)xr(0, sz) : (s64)(((xr(0, sz)) ^ xmsb(sz)) - xmsb(sz));
-            __int128 p = (__int128)sa * (__int128)sv;
-            if (sz == 8) { X[0] = (u64)p; X[2] = (u64)((unsigned __int128)p >> 64); EFLAGS &= ~(CF | OF); if (p != (__int128)(s64)(u64)p) EFLAGS |= CF | OF; }
-            else { u64 lo = (u64)p & xmask(sz * 8 > 32 ? 4 : (sz * 8 > 16 ? 2 : 1)); (void)lo; xw(0, sz, (u64)p); xw(2, sz, (u64)((unsigned __int128)p >> (sz * 8))); EFLAGS &= ~(CF | OF); if (p != (__int128)(s64)((u64)p & xmask(sz))) EFLAGS |= CF | OF; }
+            if (sz == 8) {
+                s64 hi = 0;
+                s64 lo = _mul128(sa, sv, &hi);
+                X[0] = (u64)lo; X[2] = (u64)hi;
+                EFLAGS &= ~(CF | OF);
+                if (hi != (lo >> 63)) EFLAGS |= CF | OF;
+            } else {
+                s64 p = sa * sv;
+                xw(0, sz, (u64)p & msk);
+                xw(2, sz, ((u64)p >> (sz * 8)) & msk);
+                EFLAGS &= ~(CF | OF);
+                s64 truncated = (sz == 1) ? (s64)(s8)(u8)p
+                               : (sz == 2 ? (s64)(s16)(u16)p : (s64)(s32)(u32)p);
+                if (p != truncated) EFLAGS |= CF | OF;
+            }
             return 1;
         }
         /* div / idiv */
         if (a == 0) { g_halted = 1; return x64_stop("除零（0x%08X）", (u32)RIP); }
         if (sz == 8) {
-            if (sub == 6) { unsigned __int128 dv = ((unsigned __int128)X[2] << 64) | X[0]; unsigned __int128 q = dv / a; if (q > 0xFFFFFFFFFFFFFFFFull) { g_halted = 1; return x64_stop("div 溢出"); } X[0] = (u64)q; X[2] = (u64)(dv % a); }
-            else { __int128 dv = (__int128)(((unsigned __int128)X[2] << 64) | X[0]); __int128 q = dv / (__int128)(s64)a; __int128 rm = dv % (__int128)(s64)a; X[0] = (u64)q; X[2] = (u64)rm; }
+            if (sub == 6) {
+                u64 rem = 0, q;
+                if (X[2] >= a) { g_halted = 1; return x64_stop("div 溢出"); }
+                q = _udiv128(X[2], X[0], a, &rem);
+                X[0] = q; X[2] = rem;
+            } else {
+                s64 rem = 0;
+                s64 q = _div128((s64)X[2], (s64)X[0], (s64)a, &rem);
+                X[0] = (u64)q; X[2] = (u64)rem;
+            }
             return 1;
         }
         u64 dv = (sz == 1) ? (xr(0, 2) & 0xFFFF) : (((xr(2, 2) & 0xFFFF) << 16) | (xr(0, 2) & 0xFFFF));
@@ -4120,11 +4223,11 @@ static int x64_execute(u8 op, int rex_w, int rex_r, int rex_x, int rex_b) {
         else imm = xf4();
         u64 src = x64_read(&m);
         if (opsz == 8) {
-            s64 p = (s64)src * (s64)imm;
-            __int128 ex = (__int128)(s64)src * (__int128)(s64)imm;
-            X[m.reg] = (u64)p;
+            s64 hi = 0;
+            s64 lo = _mul128((s64)src, (s64)imm, &hi);
+            X[m.reg] = (u64)lo;
             EFLAGS &= ~(CF | OF);
-            if (ex != (__int128)p) EFLAGS |= CF | OF;
+            if (hi != (lo >> 63)) EFLAGS |= CF | OF;
         } else {
             s64 p = (s64)(s32)(u32)src * (s64)(s32)(u32)imm;
             u64 r = (u64)p & xmask(opsz);
@@ -4699,8 +4802,13 @@ static int x64_execute(u8 op, int rex_w, int rex_r, int rex_x, int rex_b) {
         case 0xAF: {                                                                                  /* imul r, r/m */
             x64m_t m; x64_modrm(&m, opsz, rex_r, rex_x, rex_b);
             u64 src = x64_read(&m);
-            if (opsz == 8) { s64 p = (s64)xr(m.reg, 8) * (s64)src; __int128 exact = (__int128)(s64)xr(m.reg, 8) * (s64)src; X[m.reg] = (u64)p; EFLAGS &= ~(CF | OF); if (exact != (__int128)p) EFLAGS |= CF | OF; }
-            else { s64 p = (s64)(s32)(u32)xr(m.reg, opsz) * (s64)(s32)(u32)src; u64 r = (u64)p & xmask(opsz); xw(m.reg, opsz, r); EFLAGS &= ~(CF | OF); if (p != (s64)(s32)(u32)r) EFLAGS |= CF | OF; }
+            if (opsz == 8) {
+                s64 hi = 0;
+                s64 lo = _mul128((s64)xr(m.reg, 8), (s64)src, &hi);
+                X[m.reg] = (u64)lo;
+                EFLAGS &= ~(CF | OF);
+                if (hi != (lo >> 63)) EFLAGS |= CF | OF;
+            } else { s64 p = (s64)(s32)(u32)xr(m.reg, opsz) * (s64)(s32)(u32)src; u64 r = (u64)p & xmask(opsz); xw(m.reg, opsz, r); EFLAGS &= ~(CF | OF); if (p != (s64)(s32)(u32)r) EFLAGS |= CF | OF; }
             return 1;
         }
         case 0xB6: case 0xB7: case 0xBE: case 0xBF: {                                                 /* movzx/movsx */
