@@ -20,7 +20,10 @@ extern void scan_one_file(const char *path);
 extern void scan_get_outcome(ScannerResult *out);
 extern void scan_set_lib_mode(int on);
 
+/* 读共享 / 重载独占：多线程扫描可以并行，reload 时短暂阻塞所有扫描。 */
 static SRWLOCK g_scan_lock = SRWLOCK_INIT;
+static INIT_ONCE g_sigdb_once = INIT_ONCE_STATIC_INIT;
+static INIT_ONCE g_scaler_once = INIT_ONCE_STATIC_INIT;
 static int g_db_loaded = 0;
 static int g_db_count = 0;
 static int g_scaler_loaded = 0;
@@ -29,19 +32,20 @@ static int g_scaler_tried = 0;
 extern int load_scaler(const char *path);
 
 /* 在 DLL 同级 / 上级目录找 scaler.txt；找不到时模型分支不可用 */
-static void ensure_scaler(void) {
+static BOOL CALLBACK scaler_init_once(PINIT_ONCE once, PVOID param, PVOID *ctx) {
     HMODULE hm = NULL;
     char dir[1024];
     char cand[1200];
     char *p;
-    if (g_scaler_loaded || g_scaler_tried) return;
+    (void)once; (void)param; (void)ctx;
+
     g_scaler_tried = 1;
     if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (LPCSTR)(const void *)&scanner_abi_version, &hm))
-        return;
-    if (!GetModuleFileNameA(hm, dir, (DWORD)sizeof(dir))) return;
+        return TRUE;
+    if (!GetModuleFileNameA(hm, dir, (DWORD)sizeof(dir))) return TRUE;
     p = strrchr(dir, '\\');
-    if (!p) return;
+    if (!p) return TRUE;
     *p = '\0';
 
     static const char *const rel[] = {
@@ -55,17 +59,24 @@ static void ensure_scaler(void) {
             break;
         }
     }
+    return TRUE;
+}
+
+static void ensure_scaler(void) {
+    InitOnceExecuteOnce(&g_scaler_once, scaler_init_once, NULL, NULL);
 }
 
 /* 首次扫描前自动找 DLL 同级 / ..\db / ..\..\db 下的 signatures.db。
- * 找不到就只用内置特征表，不影响任何现有结论。 */
-static void ensure_signature_db(void) {
+ * 找不到就只用内置特征表，不影响任何现有结论。
+ * 该函数在 reload 时由独占锁保护，其他时候由 InitOnce 保证只执行一次。 */
+static void load_signature_db_now(void) {
     HMODULE hm = NULL;
     char dir[1024];
     char cand[1200];
     char *p;
-    if (g_db_loaded) return;
+
     g_db_loaded = 1;
+    g_db_count = 0;
     if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (LPCSTR)(const void *)&scanner_abi_version, &hm))
         return;
@@ -87,6 +98,16 @@ static void ensure_signature_db(void) {
     }
 }
 
+static BOOL CALLBACK sigdb_init_once(PINIT_ONCE once, PVOID param, PVOID *ctx) {
+    (void)once; (void)param; (void)ctx;
+    load_signature_db_now();
+    return TRUE;
+}
+
+static void ensure_signature_db(void) {
+    InitOnceExecuteOnce(&g_sigdb_once, sigdb_init_once, NULL, NULL);
+}
+
 static int run_ansi(const char *path, ScannerResult *out) {
     if (!path || !path[0] || !out) return 1;
     ensure_signature_db();
@@ -99,11 +120,10 @@ static int run_ansi(const char *path, ScannerResult *out) {
         return 2;
     }
 
-    AcquireSRWLockExclusive(&g_scan_lock);
-    scan_set_lib_mode(1);            /* 关闭文本输出 + 关闭 pe_vm 联动 */
+    AcquireSRWLockShared(&g_scan_lock);   /* 多线程扫描可并行；reload 时独占 */
     scan_one_file(path);
     scan_get_outcome(out);
-    ReleaseSRWLockExclusive(&g_scan_lock);
+    ReleaseSRWLockShared(&g_scan_lock);
 
     if (out->layer[0] && strcmp(out->layer, "错误") == 0) return 2;
     if (!out->bracket[0]) return 2;
@@ -155,18 +175,19 @@ int scanner_result_level(const ScannerResult *r) {
 }
 
 int scanner_signature_db_count(void) {
+    int n;
     ensure_signature_db();
-    if (g_db_count <= 0) g_db_count = signature_db_count();
-    return g_db_count;
+    AcquireSRWLockShared(&g_scan_lock);
+    n = (g_db_count > 0) ? g_db_count : signature_db_count();
+    ReleaseSRWLockShared(&g_scan_lock);
+    return n;
 }
 
 int scanner_reload_signature_db(void) {
     int n;
     AcquireSRWLockExclusive(&g_scan_lock);
     signature_db_clear();
-    g_db_loaded = 0;
-    g_db_count = 0;
-    ensure_signature_db();
+    load_signature_db_now();          /* 独占锁内强制重载 */
     n = g_db_count;
     ReleaseSRWLockExclusive(&g_scan_lock);
     return n;
@@ -174,4 +195,15 @@ int scanner_reload_signature_db(void) {
 
 int scanner_get_hardware_info(ScannerHardwareInfo *out) {
     return hardware_query(out);
+}
+
+/* DLL 加载时设置一次库模式：静默 + 关闭 pe_vm 联动。
+ * 不能放在 run_ansi() 里，否则并行扫描时会对同一组全局变量重复写。 */
+BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
+    (void)reserved;
+    if (reason == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(inst);
+        scan_set_lib_mode(1);
+    }
+    return TRUE;
 }

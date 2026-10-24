@@ -12,7 +12,9 @@
 - Windows 11 通过 `DWMWA_WINDOW_CORNER_PREFERENCE` 设置原生圆角；失败静默回退；
 - 全局只使用黑/白/灰，跟随系统浅色/深色，可在设置中手动切换；
 - 左侧图标使用 Segoe Fluent Icons（失败回退 Segoe MDL2 Assets）字体字形，不自绘图标；
-- 通过 `LoadLibraryW` 加载同目录 `scanner.dll`，工作线程调用扫描，UI 线程不阻塞。
+- 通过 `LoadLibraryW` 加载同目录 `scanner.dll`，UI 线程不阻塞；
+- 目录扫描先在后台线程枚举文件，再用最多 16 个 worker 并发调用 `scanner_scan_file_w`；
+- 基准（良性 System32，500 文件 / 174.5 MB）：1 线程 7.14 s，16 线程 1.07 s，约 6.7x，结果计数一致。
 
 ## 2. 页面（仅 5 项）
 

@@ -84,7 +84,13 @@ static void print_cached_result(const char *disp_name, const char *type_line, co
 /* ---------- 扫描上下文：供目录统计与上下文日志导出使用 ---------- */
 /* 结构体定义移到 scanner_api.h，保证 DLL 导出布局与 CLI 内部布局一致 */
 typedef ScannerResult ScanOutcome;
-static ScanOutcome g_last;
+/* 并行扫描：每个线程保留自己的最近结果，避免 DLL 内部一把大锁。
+ * MSVC 用 __declspec(thread)，MinGW 用 __thread。 */
+#ifdef _MSC_VER
+static __declspec(thread) ScanOutcome g_last;
+#else
+static __thread ScanOutcome g_last;
+#endif
 
 static void outcome_reset(void) {
     memset(&g_last, 0, sizeof(g_last));

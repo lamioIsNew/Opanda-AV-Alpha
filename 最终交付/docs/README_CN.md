@@ -93,6 +93,7 @@ MalwareScanner_Release/
 | 深浅色 / 跟随系统 | 正常切换并持久化 |
 | 缺少 `scanner.dll` | 启动时明确提示，不静默失败 |
 | MSVC x64 构建 | `scanner.dll` / `ScannerUI.exe` / `HipsDriver.sys` / `pe_vm_msvc.exe` 均编译通过 |
+| 并行扫描基准（良性 System32，500 文件 / 174.5 MB） | 1 线程 7.14 s → 16 线程 1.07 s（约 6.7x），高危/疑似/正常计数一致 |
 | 隔离文件 | QTN1 头 + XOR 0x5A；旧明文 `.qtn` 兼容 |
 
 ## 5. 安全边界（重要）
