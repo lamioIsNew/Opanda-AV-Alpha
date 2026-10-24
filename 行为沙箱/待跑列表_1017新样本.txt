@@ -1,0 +1,24 @@
+﻿# 待动态沙箱分析的样本（1017新样本）
+# 生成时间: 2026-10-17 08:56:34
+# 共 15 个（已排除我方产物 scan_log_*.csv）
+#
+# 跑法 A（推荐：整个目录，自动静态选靶）:
+#   .\auto_analyze.ps1 -Target "C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本" -Top 15
+# 跑法 B（只挑静态没报毒的，专找漏报）:
+#   .\auto_analyze.ps1 -Target "C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本" -Verdicts NORMAL -All
+
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\1.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\2.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\3.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\libcef.dll
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\mediabox.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\MicrosoftEdgeUpdate_x64_1.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\MicrosoftEdgeUpdate_x64_2.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\PeLoader
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\Ransom.HydraCrypt .exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\x64_A_nolit.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\x64_D_go122.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\x64_E_go122_notiny.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\x64_F_firefox_tls.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\x64_G_noutls.exe
+C:\Users\17265\Desktop\恶意软件扫描器\样本集\1017新样本\x64_upx_test.exe

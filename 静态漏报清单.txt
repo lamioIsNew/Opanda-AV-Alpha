@@ -1,0 +1,421 @@
+﻿静态扫描 - 漏报与疑似清单（样本集 385 个文件）
+生成时间: 2026-10-17 09:41:23
+扫描器版本: SHA256 06ECE02D6BCD5E45C1FD15BD759B1AD0996648D5EE83CB5E90676CF340559EFA
+
+[总账]
+  高危 [HIGH RISK] : 194
+  疑似 [SUSPICIOUS]: 75
+  未发现 [NORMAL]  : 67
+  加壳 [PACKED]    : 25
+  跳过 [SKIP]      : 10
+  可信 [TRUSTED]   : 14  (有效数字签名)
+
+[只看可执行/脚本类文件，这类才可能是真漏报] 共 355
+  高危 188 / 仅疑似 74 / 真漏 79 / 可信 14
+
+================================================================
+A. 真漏：可执行/脚本类，却判为 未发现/加壳/跳过（按评分降序）
+================================================================
+    1.   49.95 分  [NORMAL]      3659776 B  ec360687d55a94fb637dec26ffcaa58171b1501437db02d0485f86e1812016ae.dll
+        类型: PE   检测名: 
+    2.   46.70 分  [NORMAL]      6166528 B  a2dfe1d2c43d5271f5c22fe81bf13e8972a8b67c3215ddd14c1049d8fa638443.dll
+        类型: PE   检测名: 
+    3.   46.70 分  [NORMAL]      6166528 B  a6d93a46e14e1c8d399ccd081f70cbf9eb8d76e019126ff7ef5fb42b80407c99.dll
+        类型: PE   检测名: 
+    4.   45.00 分  [NORMAL]     18066350 B  6cb50c1834a06240bbadee25e9c4fba3fa5892f1cf6d21dc28a4ec6b94279279.vbs
+        类型: 文本脚本   检测名: 
+    5.   45.00 分  [NORMAL]        65974 B  f5767e2000c9e28c20bdc16477a21e968edad3535a33663bb7ec3adaf53fd686.vbe
+        类型: 文本脚本   检测名: 
+    6.   45.00 分  [NORMAL]        55829 B  a3548fad786fca4348797cd32b7e635632df75ea4b89da02219fe74c967561b7.vbe
+        类型: 文本脚本   检测名: 
+    7.   45.00 分  [NORMAL]        57801 B  ed1f4fa45a5fd01bb1a736ce589b232a9a5c8a1010ff9d50fc2a2b6d448944e5.vbe
+        类型: 文本脚本   检测名: 
+    8.   42.09 分  [NORMAL]      6174208 B  7ddbeda50c70097212083946b1da5fbdd53fe56c0dd77098a1e756b695976a99.dll
+        类型: PE   检测名: 
+    9.   42.09 分  [NORMAL]      6174208 B  75591399de19a398c0d7bee69fdfbc205fcdd00d3bc96fbcf7ce0685bf8b33e2.dll
+        类型: PE   检测名: 
+   10.   42.09 分  [NORMAL]      6174208 B  85af3530d822a15a8f0de4560357e562003254369600ffa17c272425e1d65102.dll
+        类型: PE   检测名: 
+   11.   32.19 分  [NORMAL]       941200 B  mediabox.exe
+        类型: PE   检测名: 
+   12.   31.35 分  [NORMAL]      1118720 B  Ransom.HydraCrypt .exe
+        类型: PE   检测名: 
+   13.   30.00 分  [NORMAL]         1054 B  cb6a9b925a17b8fafc72e8f1a7c2342d071a0de7fb3868d7037d3b883da51c94.wsf
+        类型: 文本脚本   检测名: 
+   14.   25.00 分  [NORMAL]        11688 B  6c1253908b82d76cc548ab8069f7855c4b6bbec007b241211384ffe9cc272e70.ps1
+        类型: 文本脚本   检测名: 
+   15.   21.33 分  [NORMAL]        10752 B  sc2.dll
+        类型: PE   检测名: 
+   16.   20.00 分  [NORMAL]         5048 B  23d0e81b02f44b5a50cd6af26b58a702a8eba562c7d1ec1ea308ccd33dbba08c.ps1
+        类型: 文本脚本   检测名: 
+   17.   19.94 分  [NORMAL]       330256 B  2026.9.02裁员名单及补偿方案_SUTE (1).exe
+        类型: PE   检测名: 
+   18.   18.78 分  [NORMAL]       324608 B  2026.09.02.......人 员 名 单yioabcasdhqwiqgfj223.exe
+        类型: PE   检测名: 
+   19.   18.25 分  [NORMAL]        39936 B  pw.dll
+        类型: PE   检测名: 
+   20.   15.38 分  [NORMAL]         7168 B  2.exe
+        类型: PE   检测名: 
+   21.   15.00 分  [NORMAL]         3212 B  53ebb72bfccba9f18b1e2051482bd56447ddf5791d812f8198aeb0b96e6cb37a.scr
+        类型: 文本脚本   检测名: 
+   22.   12.26 分  [NORMAL]       613336 B  UpdateModule.dll
+        类型: PE   检测名: 
+   23.   12.23 分  [NORMAL]         6656 B  3.exe
+        类型: PE   检测名: 
+   24.    9.79 分  [NORMAL]        13312 B  fm.dll
+        类型: PE   检测名: 
+   25.    9.46 分  [NORMAL]       344576 B  2026.9.02裁员名单及补偿方案_SUTE (2).exe
+        类型: PE   检测名: 
+   26.    8.25 分  [NORMAL]       660480 B  Win32.GravityRAT.exe
+        类型: PE   检测名: 
+   27.    7.45 分  [NORMAL]        56584 B  18c909a2b8c5e16821d6ef908f56881aa0ecceeaccb5fa1e54995935fcfd12f7.sys
+        类型: PE   检测名: 
+   28.    4.00 分  [NORMAL]       498176 B  2026年第2季度内职人员违纪名单信息名单公示.exe
+        类型: PE   检测名: 
+   29.    3.44 分  [NORMAL]      5004031 B  76248563dc3fbd1a539d6bcc4275c843695ed08872b8794fe738e3b1657eafbf.exe
+        类型: PE   检测名: 
+   30.    3.01 分  [NORMAL]      4547072 B  6702d4f508ebf248a56bb2d14b1afdc8557398b3b94c25a6d23eb61533647373.exe
+        类型: PE   检测名: 
+   31.    2.94 分  [NORMAL]        65024 B  cam.dll
+        类型: PE   检测名: 
+   32.    2.47 分  [NORMAL]         6648 B  b964f979ffe5dd591498b47fe45e548a6dff86ad4697c2161312187a8ab1c01e.sys
+        类型: PE   检测名: 
+   33.    1.72 分  [NORMAL]      3771944 B  2de6e101884f841fce0c313d685dd37c4c9d470988e33acf683cfde400bdee28.exe
+        类型: PE   检测名: 
+   34.    1.57 分  [NORMAL]        13312 B  ch.dll
+        类型: PE   检测名: 
+   35.    1.45 分  [NORMAL]        75296 B  8c382f17397517bda1ac66533c8c40c571e1ec078c84a4b2d397fa2f34bdd1c4.dll
+        类型: PE   检测名: 
+   36.    1.40 分  [NORMAL]        88016 B  Open the latest report on the computer.exe
+        类型: PE   检测名: 
+   37.    1.39 分  [NORMAL]         3584 B  941f22db88f2c0f64e2af53a93389ccff2c005701ea80d3c5c1dbe200d25bd1e.exe
+        类型: PE   检测名: 
+   38.    1.35 分  [NORMAL]     36217272 B  install_n8.1.12.exe
+        类型: PE   检测名: 
+   39.    1.34 分  [NORMAL]       387584 B  97b2010e1866b7af4757962833bfb30e16ce03685591d4339b6c9eacb2cae281.dll
+        类型: PE   检测名: 
+   40.    1.34 分  [NORMAL]       387584 B  9ba9080b517997bf8324ede2f4fc11579cc30a519efe6ffe48a036a7e41c2315.dll
+        类型: PE   检测名: 
+   41.    1.16 分  [NORMAL]       391168 B  libcef.dll
+        类型: PE   检测名: 
+   42.    1.11 分  [NORMAL]     39555584 B  inste_a3.1.3.11.exe
+        类型: PE   检测名: 
+   43.    0.85 分  [NORMAL]       708520 B  4fcc6f575587d0a49cc4c1ad4e9168a8d4b9d31c889910525bde673888dbfd39.sys
+        类型: PE   检测名: 
+   44.    0.42 分  [NORMAL]       119808 B  8fed74fc6195bbc09ef4c896fbc6b9e7944c3059a7b1f8e9f750a60d74228527.dll
+        类型: PE   检测名: 
+   45.    0.24 分  [NORMAL]        29184 B  666.exe
+        类型: PE   检测名: 
+   46.    0.15 分  [NORMAL]       417280 B  Mic.dll
+        类型: PE   检测名: 
+   47.    0.10 分  [NORMAL]       227384 B  736f49c064aa3ae9d46a9c3a9dfa27c438b487eb826d1977e97906334e5309d8.sys
+        类型: PE   检测名: 
+   48.    0.09 分  [NORMAL]        91040 B  22a548eb8a637b40c6e9320e00d7645d0d64169db4ee780cc16399913ec66121.sys
+        类型: PE   检测名: 
+   49.    0.09 分  [NORMAL]     57864704 B  inst_s0t000.exe
+        类型: PE   检测名: 
+   50.    0.09 分  [NORMAL]        18944 B  56d480e49134546cd66e1b74c5de1c83329177a835453c3a9b431efc3e5269b8.sys
+        类型: PE   检测名: 
+   51.    0.08 分  [NORMAL]        17952 B  fa55b4b13fe8597ecbeaac5019850d9677de87d30fb73bed0880ba783375cf2c.sys
+        类型: PE   检测名: 
+   52.    0.07 分  [NORMAL]        18984 B  ca307c0a096a3abae2ca5806ebd2fb117714fa16f16d53521ba2b20431d0d80f.sys
+        类型: PE   检测名: 
+   53.    0.06 分  [NORMAL]        17936 B  f771928fc36d33c4f8f23b2a2102a639041a1dbcf595627ccef0c7a6c5fc8274.sys
+        类型: PE   检测名: 
+   54.    0.06 分  [NORMAL]        18248 B  c35da46b7d76a186a7bdd829e36c3c6526dc91274558d7070c9fa8820f5a9756.sys
+        类型: PE   检测名: 
+   55.    0.04 分  [NORMAL]        17464 B  1b8f6a918721eb6f94723ee879d935941797398827b75b69939262be41f2728e.sys
+        类型: PE   检测名: 
+   56.         分  [PACKED]      1734656 B  edae3ddf216afd22d3b9774ed4f3b2b71b9da9810457791723d4982da87260e2.exe
+        类型: PE   检测名: 
+   57.         分  [PACKED]     31327744 B  Setup_winletlatst安装.exe
+        类型: PE   检测名: 
+   58.         分  [PACKED]      1621504 B  f3a30e693eb0a3ea54c91e6e7e7ba3082967083be9e9034da54c4dd967a01dc1.sys
+        类型: PE   检测名: 
+   59.         分  [PACKED]     45070653 B  deepseek_v4.7169_x64.exe
+        类型: PE   检测名: 
+   60.         分  [PACKED]      2104320 B  1.exe
+        类型: PE   检测名: 
+   61.         分  [SKIP]       10072064 B  b66415933fbe8512cd5d34a33d3673562b5498c92a0b1b2609bde414f51ccd9f.msi
+        类型: 未知   检测名: 
+   62.         分  [PACKED]      3126272 B  x64_upx_test.exe
+        类型: PE   检测名: 
+   63.         分  [PACKED]      2933760 B  1a92991e472345b682a7001bd4ff4a91415599a8423d27921302c46b581cf044.exe
+        类型: PE   检测名: 
+   64.         分  [PACKED]      2951680 B  1adc02d8d3ed2f300418b3b7b5edab72962c40f6b237da12b339fa700ce9e9ea.exe
+        类型: PE   检测名: 
+   65.         分  [PACKED]     14064120 B  2ba0d4a1d245911c3c1d6de462e6d43748cb855c5e43191ddb44e57f0e556c7b.exe
+        类型: PE   检测名: 
+   66.         分  [PACKED]      3394576 B  2ceeac4dd38579e87936343e2819492ac88dd27d489aa72ef5c622e772f9bf0c.exe
+        类型: PE   检测名: 
+   67.         分  [PACKED]     14038081 B  2dfe533cdd6c2ea50640338fd3a53ffb5620e82009575bd27aa10be5e7444897.exe
+        类型: PE   检测名: 
+   68.         分  [PACKED]     14057554 B  2f7470a242b074d8208318b1d5b743ac7ba730d0462e487763b38be7760543e9.exe
+        类型: PE   检测名: 
+   69.         分  [PACKED]      2719024 B  d36c28b362ac8c959083061aa5aa488cced465e48fa9e6cb551783ddcf4382c5.sys
+        类型: PE   检测名: 
+   70.         分  [PACKED]    110739895 B  55555.exe
+        类型: PE   检测名: 
+   71.         分  [PACKED]     71649927 B  6d772ec8b17c64c8c12fce169044e0304d1fbe0d26503641cd49936af2f26e17.exe
+        类型: PE   检测名: 
+   72.    0.00 分  [NORMAL]        19024 B  9c8902cef7ad101f6145c46e7b6dee6e9c456343a1f322f89e39f9dd830816ee.wsf
+        类型: 文本脚本   检测名: 
+   73.         分  [PACKED]    113171256 B  9eKQJ.exe
+        类型: PE   检测名: 
+   74.         分  [PACKED]      3473472 B  9f416279fdeec41b078b49fdc5c5eda239566008302205ba95c4d308d15f4de1.sys
+        类型: PE   检测名: 
+   75.         分  [PACKED]      5629768 B  abf6dd2e3f266caae97d066c071e904147a7e3f7e6ac2185136766fc983b2f23.dll
+        类型: PE   检测名: 
+   76.         分  [PACKED]      1113848 B  aca33b66c279613ad087858bb02daae72f1773174102ceb9f0b20654e6741422.sys
+        类型: PE   检测名: 
+   77.         分  [PACKED]       491520 B  b44634d90a9ff2ed8a9d0304c11bf612.bin
+        类型: PE   检测名: 
+   78.         分  [PACKED]      9609920 B  6b32478b7d582dd0a17dad3a69eac50c8e2164b3a41649a022152db654a5e9b5.sys
+        类型: PE   检测名: 
+   79.         分  [PACKED]       142797 B  英语试卷19-21年历年真题.exe
+        类型: PE   检测名: 
+
+================================================================
+B. 仅疑似：已识别但未达高危阈值（按评分降序，前 60）
+================================================================
+    1.   75.00 分  [SUSPICIOUS - SCRIPT]      809198 B  9ed811efeac2d92a10d2e1a061180e8cf7947508b2c0e3db745e19804dcbf276.js
+    2.   75.00 分  [SUSPICIOUS - SCRIPT]        2076 B  ed6e39e215d455b0dba736cb4704cd98144fd1713923ca29116ca0784dfdcb80.ps1
+    3.   75.00 分  [SUSPICIOUS - SCRIPT]      619121 B  e639f482a9d9e246d2d7403351cbe70e28ef2ca6d1ccd71aeafac6a334cd9486.vbs
+    4.   75.00 分  [SUSPICIOUS - SCRIPT]        2076 B  e37b0e5a94a7a37c758d281d234fdc00fb7157e0ad2e08fc66a6bbb799f9a9db.ps1
+    5.   75.00 分  [SUSPICIOUS - SCRIPT]      822422 B  ff587b5684660f1b3ffa5d4c2d905c98693124a8285404f13f6c2373709a4966.js
+    6.   75.00 分  [SUSPICIOUS - SCRIPT]     4734242 B  28c3c3adeec1e1cd9db80fa63f73bad0cad87a9716e9c7fa811a1e0936bdb68b.vbs
+    7.   70.00 分  [SUSPICIOUS - SCRIPT]       12261 B  03e4735802d23007e8e35bc333744466fafb3f21b760f1fa89e01d046d2c3fd9.hta
+    8.   70.00 分  [SUSPICIOUS - SCRIPT]        4344 B  9887e744567fdd5c27954bee4dbfc568bcee5eead952b37c02ddd850247dfaeb.cmd
+    9.   70.00 分  [SUSPICIOUS - SCRIPT]        8991 B  9f1ceabd6ddca6792850eb36a10fb8a5a0332b635512ed4e950525e0af43519d.jse
+   10.   70.00 分  [SUSPICIOUS - SCRIPT]       12184 B  a0ca332f26bf6fd5432c23816d7ebd8d5ce1f77fa5799956e78d222514790e0f.hta
+   11.   70.00 分  [SUSPICIOUS - SCRIPT]       12152 B  b648be47759e5b5f028addb769c6a27ddb0eea0c96850ce5f1de85e7190843e3.hta
+   12.   70.00 分  [SUSPICIOUS - SCRIPT]       12075 B  bed453c52fa95076e31c7c0e694c7a7496822539ff496911057352838e15cff3.hta
+   13.   70.00 分  [SUSPICIOUS - SCRIPT]        4315 B  c929ab24086024fbc04e8e23f0d13c8a498f805d3ea160b761fab73381256f12.cmd
+   14.   70.00 分  [SUSPICIOUS - SCRIPT]       12168 B  d6cf893a9d0d309a9babb936e1565f5aae53cdb53864d0781b2eb2156a9e74be.hta
+   15.   70.00 分  [SUSPICIOUS - SCRIPT]       62451 B  e102e3d95bfe2c161025ce5fdea964a31bf3a9659e7a337078d980ffdf78d6cf.vbe
+   16.   70.00 分  [SUSPICIOUS - SCRIPT]       57090 B  e5c9cd688d4b5191846f6ff54b5d17b578d6cf9b02125cd6a9db8cb10bbf9926.vbe
+   17.   70.00 分  [SUSPICIOUS - SCRIPT]        5692 B  f3f3507a1ce9a9df054507d74a0a1f2140d8081541910a1cc6d8a16fe7309602.cmd
+   18.   70.00 分  [SUSPICIOUS - SCRIPT]        8179 B  f593a772075022c10744d049d5a748fc9599968adb2df73b6db3c4ddce80d100.ps1
+   19.   70.00 分  [SUSPICIOUS - SCRIPT]        4889 B  fdbf34dd48194d49de0edd54978fa78f23297bf15f9ba44b65d41a0c433cb71c.cmd
+   20.   70.00 分  [SUSPICIOUS - SCRIPT]       11982 B  96043cb52a034e0809b96f31aa74855511bd6b9e98bfb3ede329731863136f61.hta
+   21.   70.00 分  [SUSPICIOUS - SCRIPT]       11922 B  94e49a7710dc2732dcdd2837dd88b94378386e8cbd8eb0e04adac767571c7f3e.hta
+   22.   70.00 分  [SUSPICIOUS - SCRIPT]        4275 B  a344f45158789900517f44ea75ffc3bdcdf8676dda96fcb7d0e088d363ccfed5.cmd
+   23.   70.00 分  [SUSPICIOUS - PUA]    38932920 B  install_v6.1.0.14.exe
+   24.   70.00 分  [SUSPICIOUS - SCRIPT]        4413 B  84b331c70cb9e4a042765fe525c6201a6d1b59900697791e91b4104ed10d0ec5.cmd
+   25.   70.00 分  [SUSPICIOUS - SCRIPT]       12148 B  39c9e4b4145737291169c46a0c76b097437f02d14122e9c67cabc29e288c63b7.hta
+   26.   70.00 分  [SUSPICIOUS - PUA]    36698624 B  1a20a7ec6847d1efc48a930b9c9fde601c9d0f41c0876febedcff913dd80dc7c.exe
+   27.   70.00 分  [SUSPICIOUS - SCRIPT]        4739 B  133153597fbff67eaaa9e1c2a6f8b1357fde5ad9f5a980cc5c065e74708dfdfd.cmd
+   28.   70.00 分  [SUSPICIOUS - PUA]     7454208 B  x64_G_noutls.exe
+   29.   70.00 分  [SUSPICIOUS - PUA]     9699840 B  x64_F_firefox_tls.exe
+   30.   70.00 分  [SUSPICIOUS - PUA]     7452672 B  x64_E_go122_notiny.exe
+   31.   70.00 分  [SUSPICIOUS - SCRIPT]       12153 B  3f83fe5342c9a134d62d4100b6ef20035937bea8ff16428aeb55a27ef224e236.hta
+   32.   70.00 分  [SUSPICIOUS - PUA]     6218240 B  x64_D_go122.exe
+   33.   70.00 分  [SUSPICIOUS - SCRIPT]       11882 B  5de57cabb37d0ca33c109310eb778338afffc90c0848338f37b6760eeec3ad8b.hta
+   34.   70.00 分  [SUSPICIOUS - SCRIPT]       12150 B  7708a9dad1e14af5ffff9fb8e3d9505005d8c70a184a3ece34e589697ae22241.hta
+   35.   70.00 分  [SUSPICIOUS - SCRIPT]       12070 B  811f38be94c6bdc5e68db0a84364de86295a3dc5067103dee90492d6381f58c2.hta
+   36.   70.00 分  [SUSPICIOUS - PUA]     7053312 B  MicrosoftEdgeUpdate_x64_1.exe
+   37.   70.00 分  [SUSPICIOUS - SCRIPT]        4282 B  6c660b556e86b30e14d3960103155987ab12ee91a23b8f4338c3fcde19961295.cmd
+   38.   70.00 分  [SUSPICIOUS - PUA]     9692160 B  MicrosoftEdgeUpdate_x64_2.exe
+   39.   70.00 分  [SUSPICIOUS - SCRIPT]       12147 B  7d6ed279da93ccb157c792799dd8fd61b0751a07a49dd3699f2f7103d8b6c051.hta
+   40.   70.00 分  [SUSPICIOUS - SCRIPT]       12080 B  1ddbc07dd10ed1981b78e2a7e177ae9d4f158db870f699b12849f4e136f1cc7f.hta
+   41.   70.00 分  [SUSPICIOUS - PUA]     6611456 B  x64_A_nolit.exe
+   42.   68.05 分  [SUSPICIOUS]      246784 B  Document-772976_829712.scr
+   43.   66.74 分  [SUSPICIOUS]     6537104 B  ec3a531649e724dc40ba36cd8df9a72dd722e6cda9930ca2847437e0c063d103.dll
+   44.   65.55 分  [SUSPICIOUS]     6537104 B  7f4cf01b6aa7607b6d524ef430dc304848128ff4ab5582c7a09a85f28af022fa.dll
+   45.   65.00 分  [SUSPICIOUS - SCRIPT]       54207 B  eb33f74cba8280efd9e7961508f7555c7378718d7f4caec55960a323a079c247.vbe
+   46.   65.00 分  [SUSPICIOUS - SCRIPT]        2583 B  d7066697d8e7c6b4b5e7724bd52ecf2ff44a7797502fa1e7c9f969397180275e.ps1
+   47.   65.00 分  [SUSPICIOUS - SCRIPT]      101207 B  cf448d2569f935b69074d7df8398d8552b1d294210c7dd818fe202945687bfe8.vbe
+   48.   65.00 分  [SUSPICIOUS - SCRIPT]     1701510 B  fde58658a942d193be361e3851060af4c5573d26251258aa97db23c6f1c81bbe.cmd
+   49.   65.00 分  [SUSPICIOUS - SCRIPT]       79931 B  ea3cc28c4ab73cceb9f0bb36267cb6ed4eb4bfe56cb31968b456e09fb82c3495.vbe
+   50.   65.00 分  [SUSPICIOUS - SCRIPT]       58427 B  f7ff874a16551b7f74615fad365076e1704a575557533eba4cd4bc32435f6ee5.vbe
+   51.   65.00 分  [SUSPICIOUS - SCRIPT]       88952 B  b783a981a31c5c85a77ccf4b572c0cbad8d66237204164a4720663445dbdfb1d.vbe
+   52.   65.00 分  [SUSPICIOUS - SCRIPT]       58663 B  a4c2f558618edbfe609fc50fb9c873b0d895df2b59bf256f4230e55092d8f829.vbe
+   53.   65.00 分  [SUSPICIOUS - SCRIPT]    40584810 B  2b5d2991f039a98accbe3697f7b625d34ea36b42535f4a1bd78596a51d2e43d1.vbs
+   54.   65.00 分  [SUSPICIOUS - SCRIPT]       83588 B  b54378e29cdea0b95f1dd513269b16af061d1e4a40162dd8b71e19796237cc27.vbe
+   55.   65.00 分  [SUSPICIOUS - SCRIPT]       60452 B  8c23cd316bef30fbed31b835fd17ab0b21f0bcee84d69efc0d984db87fb58418.vbe
+   56.   65.00 分  [SUSPICIOUS - SCRIPT]       77421 B  95d361da9317a7ec4ec5ec95011ff9cbdd5cafc53d851d73071c45cde88251a9.vbe
+   57.   65.00 分  [SUSPICIOUS - SCRIPT]         651 B  96144a4b38ac3b83fb802b46ab2223c1c61121bd8b8e407b7bd00e503ea05dba.wsf
+   58.   65.00 分  [SUSPICIOUS - SCRIPT]       61742 B  a7b0d33c5b8e1b4fc8a8b62bad7ddd43f20f540c40b6cc7612f530f2a5b4dabc.vbe
+   59.   65.00 分  [SUSPICIOUS - SCRIPT]       53176 B  a5a12110c73e381d000ea72a47f676c4c738ef7be3af73313009916724abc7e9.vbe
+   60.   60.00 分  [SUSPICIOUS - SCRIPT]        3598 B  c2e0982de94e50f08345d052021bdc965fa4fb6d3d7def2c59df5775946c9dc3.ps1
+
+注：疑似里绝大多数是 <SHA256>.hta/.cmd/.vbs/.js 形态的投放器，静态只能给到 70-75 分；
+    要确认需靠行为沙箱（见 行为沙箱 目录与待跑列表）。
+
+==============================================================
+【本轮更新】"脚本虚拟沙盒"上线后，以下文件已从"疑似"升级为"高危"
+
+新扫描器版本: scan.exe SHA256 936CF46E82FF59D8B4AF3BB13224D8870CF4F1208F8F25137321375CDA36EC68
+              stream_scan.exe SHA256 09DB3A103DD95D5B6C4D67F6A5BBEE031C1B992545B74DF3C3B6C0DCD7010871
+
+  1. ff587b5684660f1b3ffa5d4c2d905c98693124a8285404f13f6c2373709a4966.js  (822 KB)
+     75.00 分 [SUSPICIOUS - SCRIPT]  →  100.00 分 [HIGH RISK - SCRIPT]
+     触发规则: 大量转义混淆(+45); eval塔(转义+间接调用)(+45); 超长单行(+15); 较大脚本文件(+15)
+     实测还原出的真实行为:
+        下载 https://massagebycath.com.au/Zoom.zip
+          → 落地 %TEMP%\3c11.zip / %TEMP%\3c11.bin
+          → 用 Shell.Application 解压到 %TEMP%\3c11
+          → 在该目录里找 .exe(有同名 .dll 的优先) → WScript.Shell.Run 执行
+          → 若载荷是 .msi 则 msiexec.exe /i "<路径>" /qn
+     反沙箱: /wscript/i.test(WScript.FullName) 后关闭 WScript.Interactive；90 秒时间差等待循环
+
+  2. 9ed811efeac2d92a10d2e1a061180e8cf7947508b2c0e3db745e19804dcbf276.js  (809 KB)
+     75.00 分 [SUSPICIOUS - SCRIPT]  →  100.00 分 [HIGH RISK - SCRIPT]
+     同族(同混淆器、同落地/执行逻辑)，仅 C2 不同:
+        https://abilityindisabilityindia.org/wewe.exe  →  %TEMP%\6dd3.exe / %TEMP%\6dd3.msi
+
+A/B 回归（全样本集 385 个文件，旧二进制 vs 新二进制逐文件比对）:
+    判定发生变化的文件: 仅上述 2 个，其余 383 个完全一致（零误报恶化）
+    高危 194 → 196，疑似 75 → 73，报毒总数 269 不变（两个文件由"疑似"升为"高危"）
+
+还原过程、工具与完整报告见  沙箱\脚本虚拟沙盒\  目录。
+==============================================================
+================================================================
+【本轮找回记录 · 2026-10-17】PE 释放体还原（pe_vm --extract）
+================================================================
+方法：对外壳 PE 做静态释放体还原（overlay / 内嵌 PE 抠出后复扫），不执行样本。
+范围：样本集 108 个 PE（52 exe / 24 dll / 30 sys / 2 scr）。
+结果：抠出释放体 79 个，其中结构自洽内嵌 PE32/PE64 共 12 个（含"驱动套驱动"）。
+新增检出（旧引擎只统计 MZ 次数、不还原，故均为新增）：
+  · njRAT_释放体\01_PE32_off0x539.bin   [HIGH RISK - SIGNATURE] 100.00  风险名 njRAT_Artifact
+  · njRAT_释放体\02_PE32_off0xE0D3E.bin [HIGH RISK]             97.49
+  · dump1_释放体\01_PE32_off0x293F.bin  [SUSPICIOUS]            76.28
+  · deepseek_v4.7169_x64_释放体\04/05_PE32_*  [PACKED]（内层仍加壳，待阶段二脱壳）
+工具：F:\SVM项目\behavior\pev\pe_vm.exe（阶段一：虚拟装载 / 导入表虚拟化 / 释放体还原）
+说明：火绒文档方向已对齐——PE 与脚本统一走"用户态虚拟执行"，不再使用虚拟机。
+================================================================
+本轮找回记录 · 2026-10-17（PE x86-32 解释器虚拟执行 · pe_vm 运行模式）
+================================================================
+依据：火绒“脚本行为沙盒”简介.pdf —— 脚本与 PE 统一走【用户态虚拟执行】（解释器在
+      进程内、内存逐次校验、API 全假实现），不使用虚拟机；E 盘两台分析机保持原状未启用。
+范围：样本集全部 114 个 PE（65 个 PE32+ 需 x64 另一路；12 个 .NET 需 IL 一路；2 个非法/空）。
+新增能力：x86-32 解释器（解壳常用指令，另补齐 cmovcc/setcc/bt族/shld-shrd/x87/SSE）；
+          150+ 虚拟 API（含 stdcall 参数个数表，避免栈错位）；写后执行(OEP)检测与脱壳落盘；
+          虚拟文件系统（落地物只存在内存，绝不碰真盘）；线程环境 TEB/PEB/栈与返回哨兵。
+实测：35 个样本真实虚拟执行，累计 18,318,517 条指令；16 个样本有 API 行为记录。
+
+★ 行为面证据（静态特征难以稳定命中的）：
+  1) win33.exe —— 虚拟执行直接给出“自启动持久化”链：
+       RegCreateKeyEx("Software\HelperSolutions Software")
+       RegCreateKeyEx("Software\Microsoft\Windows\CurrentVersion\Run")   ← 开机自启
+       RegSetValueEx("Digit") / RegSetValueEx("S") / RegSetValueEx("1806")
+       RegSetValueEx("LowRiskFileTypes", ".exe;.bat;.reg;.vbs;")        ← 降低“打开文件”安全提示
+       并企图启动进程（CreateProcess）
+  2) 长循环样本（加大预算后）：Ransom.HydraCrypt .exe 跑到 2212 万条指令仍未收尾，
+     win33.exe 529 万条 —— 属“反沙箱空转 / 长解密循环”，已如实标注。
+
+回归：阶段一释放体还原未受影响 —— njRAT.exe / dump1.exe 的释放体偏移、长度、复扫判定
+      （[HIGH RISK - SIGNATURE] 100.00 / [SUSPICIOUS] 76.28）与上一轮完全一致。
+
+边界（如实）：PE32+ 需 x64 解释器；.NET 需 IL 分析；未登记参数个数的 API 按 0 参数处理；
+      不模拟 SEH/异常派发；资源加载类（FindResource/LoadResource）尚未实现。
+
+工具：F:\SVM项目\behavior\pev\pe_vm.exe（阶段一 + 阶段二）
+      用法：pe_vm.exe --selftest | --load <样本> | --extract <样本> | <样本> [--outdir 目录] [--trace 日志]
+交付：C:\Users\17265\Desktop\恶意软件扫描器\沙箱\PE虚拟执行沙盒\（含 实测\ 全套证据与自检）
+
+================================================================
+本轮找回记录 · 2026-10-17 傍晚（加壳 PE 批量虚拟执行 + 接入扫描器主流程）
+================================================================
+范围：H:\新建文件夹\_已解压 里 41 个 [PACKED] PE（AES zip 解出，密码 infected）。
+
+先补 9 条指令（否则入口就停）：
+  · clc/stc/cmc（清/置/翻转 CF）、cld/std（串操作方向）、cli/sti（虚拟环境改 IF）
+    —— 此前落在“未实现”分支，凡是入口先清标志位的壳会立刻停机；
+  · aam/aad（BCD 调整）—— 混淆壳常拿它藏字节。
+  效果：9f72fdfd….exe 由“停在 0xF8”变为越过 aam 混淆段后跑到 61.5 万条指令才遇 取指越界 @0。
+
+41 个加壳 PE 的虚拟执行分类（预算 1500 万条 / 10 秒）：
+  · PE32+（x64）        26 个 —— 用 PE 头 Machine 字段逐一确认（不是猜的），需 x64 解释器
+  · .NET 程序集          4 个 —— CLR 数据目录非空，需 IL 分析
+  · 预算耗尽             4 个 —— 15,000,000 条指令内未收尾（长解密 / 反沙箱空转）
+  · 跳 0x00000000        4 个 —— 疑似依赖 SEH / 被伪造的环境返回值
+  · 未实现编码           3 个 —— FF /7（真机 #UD）、0F 00（系统指令）等陷阱
+  · 解出载荷 / 命中 OEP  0 个 —— 本批没有能在预算内脱壳的
+
+★ 诚实结论：这一批“加壳”里 26 个是 x64、4 个是 .NET，真正能喂给 x86-32 解释器的只有 15 个，
+  且大多用“未定义编码 + SEH”挡路。本轮虚拟执行没有新增找回（没解出载荷），产出是
+  把它们归了类并补齐 9 条指令 —— 记在这里，避免下次重复投入。
+
+新增：接进扫描器主流程（scan_any.ps1）—— 静态判为 [PACKED] 的 PE 自动做用户态虚拟执行：
+  · 新增开关 -NoPevm / -PevmAll / -PevmMaxInsn / -PevmMaxSec / -PevmOutDir；
+  · 只读 PE 头分流：x86 才真跑，x64/.NET 只写一行“跳过 + 原因”（不复制、不执行）；
+  · 动态结论用独立标记 [VM: 恶意行为] / [VM: 未见异常] / [VM: 无法定论]，不碰既有机器标记，
+    == 汇总: … == 行逐字不变；另加 == 虚拟执行: … == / == 动态找回: … == 两行独立统计；
+  · 解壳产物自动再交 scan.exe 复扫，报毒的记为“动态找回”，产物存 <目标>\_虚拟执行\。
+
+验证（四条路径全部通过）：
+  1) 单文件 x86 加壳（92 MB）：[PACKED] → 虚拟执行 61.5 万条 → [VM: 未见异常]
+  2) 单文件 x64 加壳：[PACKED] → 跳过：64 位 PE（PE32+）→ [VM: 无法定论]
+  3) AES 加密 zip 内成员：管道扫描 [PACKED] → 解到临时目录 → 虚拟执行 → [VM: 未见异常]
+  4) 已知恶意样本 win33.exe（-PevmAll）：[HIGH RISK] + [VM: 恶意行为]，
+     证据含 RegCreateKeyEx("…\CurrentVersion\Run") 等注册表敏感项与“企图启动进程”
+
+工具：C:\Users\17265\Desktop\恶意软件扫描器\沙箱\PE虚拟执行沙盒\pe_vm.exe
+      SHA256 9242234C6CCB44A999132B6C9A5CBC5A89A6001CEBC843A552B8C24585AD351F（--selftest 全绿）
+证据：沙箱\PE虚拟执行沙盒\实测\加壳PE批量41_20261017傍晚\（41 份原始日志 + 分类.csv）
+
+更正与增量（2026-10-17 夜）：
+  · 0x6C..0x6F 是 INS/OUTS 字符串端口 I/O，32 位模式下的合法指令，不是“未定义字节”——
+    已按“非虚拟机/空操作”处理；实测 2acc3c29….exe 越过 0x6E 后停在 0F 00（系统指令组，另一处反 VM 探测）。
+  · 41 个样本分类未变；刷新后的原始日志 + 分类.csv 见 实测\加壳PE批量41_20261017夜\。
+  · pe_vm 的 --extract 输出子目录名由中文 _释放体 改为 ASCII _extracted（中文名经 ANSI fopen 会变乱码）。
+  · scan.exe 一般扫描流程也已接入虚拟执行（目录/单文件扫完自动跑；菜单 5 开关 / --no-pevm 关闭），
+    与 scan_any.ps1 共用同一份内核 pevm_lib.ps1。
+
+================================================================
+静态漏报专项分析 · 2026-10-18（x86-64 解释器上线后）
+================================================================
+背景：上节【边界】里“PE32+ 需 x64 解释器”自本轮起满足；PE 类漏报的处置路径随之改写。
+静态口径未变（扫描器二进制本轮未动）—— 变化全部在动态侧。以下对 A 段「真漏 79」逐类分析：
+哪些已被动态通道覆盖、哪些仍未覆盖、各自下一步。
+
+一、79 个真漏按成因归类
+  1) 加壳 PE（PACKED）22 个：17 个 exe/dll/bin + 5 个 .sys —— x86/x64 解释器现均可执行。
+     名样本在 114 批次的旧去向 ×现状：
+       · x64_upx_test / 裁员名单 SUTE(1)(2) / 违纪名单 / 人员名单yio… / 666.exe / edae3ddf… /
+         6702d4f5… / install_n8 / inste_a3 —— 当时“x64跳过”，现在可直接真跑；
+       · 55555.exe 已跑 → ExitProcess(203)（1382 条）；9eKQJ / Setup_winletlatst安装 / HydraCrypt
+         → 3M 预算耗尽（长解密/反沙箱空转）；deepseek_v4.7169_x64 / 英语试卷19-21 → 取指越界 @0x012C0005（49 条）。
+     SHA256 命名的 41 批次（H:\新建文件夹\_已解压）已用新二进制重跑：41/41 全部真跑（26 x64 + 15 x86），
+     终版分类 = 正常结束 12 / 越界停机 10 / .NET 4 / 自毁(int0x29) 4 / 空转检测 3 / 未实现编码 3 /
+     预算耗尽 3 / 主动退出 2；产物 实测\加壳PE批量41_20261018\。该批大多“反调试先行”（自毁/空转/越界陷阱），
+     15M 内无载荷解出 —— 轨迹与停机原因全部可复核。
+  2) .NET 程序集 ≈12 个（Mic/pw/sc2/cam/ch/fm.dll、Win32.GravityRAT.exe、1/2/3.exe、njRAT.exe …）
+     —— CLR 头非空，需 IL 解释/仿真一路（未开工，记账）。
+  3) 内核驱动 .sys ≈16 个（11 低分 + 5 加壳）—— 用户态解释器不执行驱动，不在动态通道职责内；
+     维持静态 + 后续专用规则。
+  4) 文本脚本 9 个（vbs/vbe/wsf/ps1/scr）：VBE 编码（f5767e20/a3548fad/ed1f4fa4 等）需先解码；
+     脚本虚拟沙盒现只做 JS（js_vm）。大体积 .vbs（6cb50c18… 18 MB）与 68.9 MB UTF-16 vbs 的
+     “大小/编码宽松通道”跳过 —— 扫描器侧待修（已知点）。
+  5) 引诱名 / 小型反沙箱 PE ≈14 个：动态侧已多有覆盖 —— HydraCrypt 长循环；mediabox 取指越界 @0x123184A6；
+     Open the latest report 267 条后取指越界 @0x00000000；dump1 2140 条 @0x10021000（资源 API 缺位相关）。
+  6) 安装器/PUA 3 个（install_n8 / inste_a3 / inst_s0t，36–58 MB）：商业安装器形态，维持静态 PUA 策略。
+  7) 其余低分 dll/exe（ec360687 49.95、a2dfe1d2/a6d93a46、7ddbeda5/75591399/85af3530、97b2010e/9ba9080b 等）：
+     组件/孪生类；已有“加壳→动态”与“签名→可信”两条通道，无结论则人工看图
+     （libcef.dll 虚拟执行 49 条正常返回，属组件）。
+
+二、动态通道现状（本轮实测）
+  · x86-32：常用指令集 + x87/SSE 常用组 + 150+ 假 API；第三轮补表后 win33「未登记点名」54583 → 0；
+  · x86-64：新上线，PE32+ 按 ImageBase 低 32 位装载进 4GB 沙盒；41 批次 26 个 x64 全部真跑
+    （114 批次当时跳过的那 65 个 x64 现均可执行）；
+  · 空转检测：pause/jmp 自旋不推进内存即停（本批 3 个 x64 直接收割，不再耗预算）；
+  · 行为证据：win33（C2 151.248.115.107:80 + POST /w19218317418621031041543/gateway.php ×1639 +
+    Software\HelperSolutions Software 注册表痕迹）、x64_upx_test（原地解壳、整幅镜像落盘）。
+  · 联动接线实测（2026-10-18）：x86 705 条 / x64 4,168 条 两样本端到端 25.2 秒；
+    == 汇总 == 与报毒率行逐字不变；== 虚拟执行: …（其中 x64 解释执行 X、.NET 跳过 Y）== 生效。
+
+三、仍未覆盖 / 下一步（按优先级）
+  1) 资源 API 真读取（FindResource→PE 资源段）—— dump1/win33 走更远的前置；
+  2) SEH/异常派发最小实现 —— 一批“跳 0x00000000/取数越界”样本大概率依赖它；
+  3) .NET IL 旁路（12 个）—— 复用同一虚拟内存与 API 层；
+  4) x64 指令补齐（SSE 整数完备；syscall/ud2/sysenter 照旧如实停机）；
+  5) 脚本侧：VBE 解码 + 大小/编码宽松通道修复（18 MB vbs / 68.9 MB UTF-16 两项）；
+  6) 自解码指针类越界专项（NjRAT_x64、cmd.exe @0xFC7C12E9、Phobos、mediabox）—— 单独立项。
+
+四、备注
+  · [VM: …] 不进机器标记与 == 汇总 ==；联动预算 30M 条 / 60 秒（-PevmMaxInsn/-PevmMaxSec 可调）。
+  · 2026-10-22 修补（pevm_lib + pe_vm 重建）：反调试 ★（x86/x64 的 int 0x29 自毁）纳入恶意判据；
+    「未见异常」仅在正常退出/正常返回时给出，越界/预算耗尽/空转/自毁未定性一律记「无法定论」并写明停机原因。
+  · 工具哈希：pe_vm.exe 3F9259916883B66EDE2A9233A07F8C3D59E55229E18E97958D88CB4927265471；
+    pe_vm.c 18E5153CE678E3B841F238EC1D0FA944D89718D7D5F9A0855FDCFDBB204C66F9（三处镜像一致）。

@@ -1,0 +1,247 @@
+﻿{
+    "schema":  4,
+    "start":  "2026-10-17 09:09:38",
+    "host":  "08672598-305C-4",
+    "user":  "WDAGUtilityAccount",
+    "network":  false,
+    "timeout":  45,
+    "eventCapture":  false,
+    "samples":  [
+                    {
+                        "path":  "C:\\Samples\\1a20a7ec6847d1efc48a930b9c9fde601c9d0f41c0876febedcff913dd80dc7c.exe",
+                        "size":  36698624,
+                        "sha256":  "1A20A7EC6847D1EFC48A930B9C9FDE601C9D0F41C0876FEBEDCFF913DD80DC7C"
+                    }
+                ],
+    "launch":  [
+                   {
+                       "pid":  6544,
+                       "name":  "1a20a7ec6847d1efc48a930b9c9fde601c9d0f41c0876febedcff913dd80dc7c",
+                       "cmd":  "\"C:\\Samples\\1a20a7ec6847d1efc48a930b9c9fde601c9d0f41c0876febedcff913dd80dc7c.exe\" "
+                   }
+               ],
+    "processes":  [
+                      {
+                          "pid":  684,
+                          "ppid":  960,
+                          "name":  "dllhost.exe",
+                          "cmd":  "C:\\Windows\\system32\\DllHost.exe /Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  1144,
+                          "ppid":  1092,
+                          "name":  "wermgr.exe",
+                          "cmd":  "\"C:\\Windows\\system32\\wermgr.exe\" -upload",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  1400,
+                          "ppid":  804,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  1544,
+                          "ppid":  2780,
+                          "name":  "WerFault.exe",
+                          "cmd":  "C:\\Windows\\system32\\WerFault.exe -u -p 2780 -s 816",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  1560,
+                          "ppid":  2780,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  2592,
+                          "ppid":  1092,
+                          "name":  "wermgr.exe",
+                          "cmd":  "\"C:\\Windows\\system32\\wermgr.exe\" -upload",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  2780,
+                          "ppid":  804,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  3212,
+                          "ppid":  1092,
+                          "name":  "taskhostw.exe",
+                          "cmd":  "taskhostw.exe $(Arg0)",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  3872,
+                          "ppid":  6048,
+                          "name":  "WerFault.exe",
+                          "cmd":  "C:\\Windows\\system32\\WerFault.exe -u -p 6048 -s 820",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  3892,
+                          "ppid":  1092,
+                          "name":  "wermgr.exe",
+                          "cmd":  "\"C:\\Windows\\system32\\wermgr.exe\" -upload",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  3968,
+                          "ppid":  1092,
+                          "name":  "wermgr.exe",
+                          "cmd":  "\"C:\\Windows\\system32\\wermgr.exe\" -upload",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  5152,
+                          "ppid":  5972,
+                          "name":  "WerFault.exe",
+                          "cmd":  "C:\\Windows\\system32\\WerFault.exe -u -p 5972 -s 960",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  5504,
+                          "ppid":  3524,
+                          "name":  "WerFault.exe",
+                          "cmd":  "C:\\Windows\\system32\\WerFault.exe -pss -s 760 -p 7124 -ip 7124",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  5508,
+                          "ppid":  7124,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  5512,
+                          "ppid":  7124,
+                          "name":  "WerFault.exe",
+                          "cmd":  "C:\\Windows\\system32\\WerFault.exe -u -p 7124 -s 960",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  5532,
+                          "ppid":  1092,
+                          "name":  "wermgr.exe",
+                          "cmd":  "\"C:\\Windows\\system32\\wermgr.exe\" -upload",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  5604,
+                          "ppid":  960,
+                          "name":  "smartscreen.exe",
+                          "cmd":  "C:\\Windows\\System32\\smartscreen.exe -Embedding",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  5912,
+                          "ppid":  6048,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  5952,
+                          "ppid":  5972,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  5972,
+                          "ppid":  804,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  6048,
+                          "ppid":  804,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  6452,
+                          "ppid":  1400,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  6456,
+                          "ppid":  1400,
+                          "name":  "WerFault.exe",
+                          "cmd":  "C:\\Windows\\system32\\WerFault.exe -u -p 1400 -s 972",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  6536,
+                          "ppid":  3524,
+                          "name":  "WerFault.exe",
+                          "cmd":  "",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  6544,
+                          "ppid":  6016,
+                          "name":  "1a20a7ec6847d1efc48a930b9c9fde601c9d0f41c0876febedcff913dd80dc7c.exe",
+                          "cmd":  "\"C:\\Samples\\1a20a7ec6847d1efc48a930b9c9fde601c9d0f41c0876febedcff913dd80dc7c.exe\" ",
+                          "fromSample":  true
+                      },
+                      {
+                          "pid":  6716,
+                          "ppid":  1092,
+                          "name":  "WMIADAP.exe",
+                          "cmd":  "wmiadap.exe /R /T",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  6744,
+                          "ppid":  6372,
+                          "name":  "WerFault.exe",
+                          "cmd":  "C:\\Windows\\system32\\WerFault.exe -u -p 6372 -s 940",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  6748,
+                          "ppid":  6372,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      },
+                      {
+                          "pid":  7124,
+                          "ppid":  804,
+                          "name":  "svchost.exe",
+                          "cmd":  "C:\\Windows\\system32\\svchost.exe -k NetworkService -p",
+                          "fromSample":  false
+                      }
+                  ],
+    "newFiles":  [
+
+                 ],
+    "modFiles":  [
+
+                 ],
+    "regAdded":  [
+
+                 ],
+    "tasksAdded":  [
+
+                   ],
+    "servicesAdded":  [
+
+                      ],
+    "netConns":  [
+
+                 ],
+    "noiseFiltered":  111
+}

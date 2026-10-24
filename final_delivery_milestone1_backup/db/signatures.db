@@ -1,0 +1,55 @@
+# SCANNER_SIGDB 1
+# name	is_hex	severity	caro	pattern
+Phobos_VSSADMIN	0	100	Ransom.Win32.Phobos	vssadmin delete shadows
+Phobos_Ext	0	100	Ransom.Win32.Phobos	.phobos
+Phobos_Note	0	100	Ransom.Win32.Phobos	HOW_TO_DECRYPT
+Phobos_Magic_S	1	100	Ransom.Win32.Phobos	125EA7F0
+Phobos_Magic_L	1	100	Ransom.Win32.Phobos	0FBC77AF
+BrowserFleet_Module	0	100	Trojan.Win32.BrowserFleet	github.com/serhat/browser-fleet
+BrowserFleet_RunKey	0	100	Trojan.Win32.BrowserFleet	BrowserFleetRescue
+BrowserFleet_Boot	0	100	Trojan.Win32.BrowserFleet	fleet-rescue-bootstrap
+BrowserFleet_Watchdog	0	100	Trojan.Win32.BrowserFleet	--rescue-watchdog
+njRAT_Artifact	0	100	Backdoor.Win32.NjRAT	njRAT
+njRAT_Author	0	100	Backdoor.Win32.NjRAT	njq8
+njRAT_Alt	0	100	Backdoor.Win32.NjRAT	bladabindi
+KeyPass_Note	0	100	Ransom.Win32.KeyPass	DECRYPTION__KEYPASS__INFO
+KeyPass_Ext	0	100	Ransom.Win32.KeyPass	.KEYPASS
+KeyPass_Mail	0	100	Ransom.Win32.KeyPass	keypassdecrypt@
+WannaCry_Ext	0	100	Ransom.Win32.WannaCry	.WNCRY
+WannaCry_Note	0	100	Ransom.Win32.WannaCry	WanaDecryptor
+WannaCry_Task	0	100	Ransom.Win32.WannaCry	tasksche.exe
+LockBit_Ext	0	100	Ransom.Win32.LockBit	.lockbit
+Conti_Note	0	100	Ransom.Win32.Conti	CONTI_README
+REvil_Mark	0	100	Ransom.Win32.REvil	sodinokibi
+GandCrab_Mark	0	100	Ransom.Win32.GandCrab	gandcrab
+StopDjvu_Note	0	100	Ransom.Win32.StopDjvu	STOPDecryptor
+AsyncRAT	0	100	Backdoor.Win32.AsyncRAT	AsyncRAT
+QuasarRAT	0	100	Backdoor.Win32.Quasar	QuasarRAT
+Remcos	0	100	Backdoor.Win32.Remcos	Remcos
+NanoCore	0	100	Backdoor.Win32.NanoCore	NanoCore
+DarkComet	0	100	Backdoor.Win32.DarkComet	DarkComet
+Gh0st	0	100	Backdoor.Win32.Gh0st	Gh0st
+AgentTesla	0	100	Trojan.Win32.AgentTesla	AgentTesla
+Formbook	0	100	Trojan.Win32.Formbook	Formbook
+LokiBot	0	100	Trojan.Win32.LokiBot	LokiBot
+Mimikatz_Cmd	0	100	HackTool.Win32.Mimikatz	sekurlsa::logonpasswords
+Mimikatz	0	100	HackTool.Win32.Mimikatz	mimikatz
+Meterpreter	0	100	Backdoor.Win32.Meterpreter	meterpreter
+CobaltStrike	0	100	Trojan.Win32.CobaltStrike	cobaltstrike
+Miner_XMRig	0	60	RiskWare.Win32.Miner	xmrig
+Miner_Stratum	0	60	RiskWare.Win32.Miner	stratum+tcp://
+ShellLoader_Cmd_PsEnc	0	100	Trojan.Win32.ShellLoader	cmd.exe /c powershell -enc
+HTA_Mshta	0	100	Trojan.Win32.HTA	mshta.exe
+Generic_Cmd	0	70	Trojan.Win32.Generic	cmd.exe /c
+Generic_PowerShell	0	100	Trojan.Win32.Generic	powershell -enc
+Generic_VSS	0	100	Ransom.Win32.Generic	vssadmin
+Generic_Bcdedit	0	100	Ransom.Win32.Generic	bcdedit
+PUA_OpenCandy	0	60	PUA.Win32.OpenCandy	OpenCandy
+PUA_InstallCore	0	60	PUA.Win32.InstallCore	InstallCore
+PUA_DealPly	0	60	PUA.Win32.DealPly	DealPly
+PUA_BrowseFox	0	60	PUA.Win32.BrowseFox	BrowseFox
+PUA_Crossrider	0	60	PUA.Win32.Crossrider	Crossrider
+PUA_Wajam	0	60	PUA.Win32.Wajam	Wajam
+PUA_SearchProtect	0	60	PUA.Win32.SearchProtect	SearchProtect
+PUA_Yontoo	0	60	PUA.Win32.Yontoo	Yontoo
+PUA_Hao123	0	60	PUA.Win32.Hao123	hao123

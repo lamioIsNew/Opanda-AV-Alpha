@@ -1,0 +1,36 @@
+﻿扫描器最终交付
+================
+
+版本：1.0.0-dll-gui-20261024
+引擎：1.0.0-dll-20261023 (ABI 1)
+日期：2026-10-24
+平台：Windows 10/11 x64
+
+内容：
+  bin\ScannerUI.exe      WD 风格 GUI（Win32 + Direct2D）
+  bin\scanner.dll        扫描引擎（C ABI，x64）
+  bin\scanner_test.exe   最小调用示例 / 自检
+  bin\sigdb_builder.exe  内置特征导出工具
+  bin\scaler.txt         模型标准化参数
+  db\signatures.db       外部特征库（53 条）
+  sdk\scanner_api.h      C ABI 头文件
+  src\                   可重建源码快照（含 src\gui）
+  build\                 重建脚本（PS 5.1）
+  docs\                  交付说明/验证记录/边界说明
+
+已验证：
+  · 666.exe -> [NORMAL] 0.24（与 CLI 一致）
+  · Phobos -> [HIGH RISK - SIGNATURE] 100，SHA256 已写入隔离索引
+  · notepad.exe -> [TRUSTED]
+  · scan_any.ps1 -> [SUSPICIOUS - SCRIPT] 55
+  · 文件夹递归、取消、隔离、恢复、日志、深浅色、设置持久化
+  · 外部 signatures.db 优先加载；GUI 可热重载
+
+说明：
+  · 静态扫描绝不执行样本；pe_vm 在 DLL 模式强制关闭。
+  · 当前不含服务/实时监控/驱动；驱动签名与 WHQL 由使用方负责。
+  · 隔离文件按原文件保存，未加密；请放在受控目录。
+  · 当前为串行扫描；GUI 已用工作线程避免界面卡死。
+  · 未做 Authenticode 签名；正式分发前请签名。
+
+文件校验：见 SHA256SUMS.txt。

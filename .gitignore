@@ -1,0 +1,41 @@
+# ---- Malware corpus / runtime evidence: never commit ----
+/样本集/
+/行为沙箱/_work/
+/行为沙箱/分析结果/
+/沙箱/**/实测/
+/**/实测/
+*.qtn
+*.dmp
+*.etl
+*.zip
+
+# ---- Build outputs ----
+/最终交付/bin/
+/final_delivery_milestone1_backup/bin/
+/最终交付/driver/build/
+/driver/build/
+*.exe
+*.dll
+*.sys
+*.obj
+*.o
+*.a
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.res
+*.res.o
+*.tlog
+*.log
+
+# ---- Third-party tools ----
+/工具/
+
+# ---- Editor / OS ----
+.vs/
+.vscode/
+__pycache__/
+*.pyc
+Thumbs.db
+desktop.ini

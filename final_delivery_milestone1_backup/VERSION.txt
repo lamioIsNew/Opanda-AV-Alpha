@@ -1,0 +1,27 @@
+﻿扫描器最终交付 · 里程碑 1
+==============================
+
+版本：1.0.0-dll-20261023
+日期：2026-10-23
+平台：Windows 10/11 x64
+
+内容：
+  · scanner.dll          扫描引擎（C ABI）
+  · scanner_test.exe     最小调用示例/自检
+  · sigdb_builder.exe    内置特征导出工具
+  · scaler.txt           模型标准化参数
+  · db\signatures.db     外部特征库（53 条）
+  · sdk\scanner_api.h    C ABI 头文件
+  · src\                 可重建源码快照
+  · docs\                说明文档
+
+已验证：
+  · 666.exe -> [NORMAL] 0.24（与 CLI 一致）
+  · Phobos 样本 -> [HIGH RISK - SIGNATURE] 100
+  · 中文路径 / 加壳样本 / 脚本样本均正常
+  · 外部 signatures.db 可被自动加载
+
+说明：
+  · pe_vm 在 DLL 模式强制关闭，虚拟执行仍为独立实验工具。
+  · 当前为串行扫描；异步/目录/取消接口在下一里程碑。
+  · 正式分发前请对 DLL/EXE 做 Authenticode 签名。
