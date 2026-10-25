@@ -364,7 +364,7 @@ static void draw_overview(App &a, const Layout &l) {
 
     /* 硬件环境检测 */
     y += 72.0f + 14.0f;
-    D2D1_RECT_F hw = R(l.contentL, y, l.contentR, y + 156.0f);
+    D2D1_RECT_F hw = R(l.contentL, y, l.contentR, y + 188.0f);
     card(a, hw);
     text(a, L"硬件环境检测", R(hw.left + 18.0f, hw.top + 12.0f, hw.right - 120.0f, hw.top + 34.0f),
          a.theme.text, a.gfx.fH3);
@@ -392,24 +392,25 @@ static void draw_overview(App &a, const Layout &l) {
         int cx = i % 2;
         int cy = i / 2;
         D2D1_RECT_F r = R(hw.left + 18.0f + cx * (colW + 12.0f),
-                          hw.top + 44.0f + cy * 48.0f,
+                          hw.top + 44.0f + cy * 58.0f,
                           hw.left + 18.0f + cx * (colW + 12.0f) + colW,
-                          hw.top + 44.0f + cy * 48.0f + 42.0f);
+                          hw.top + 44.0f + cy * 58.0f + 52.0f);
         fill_rect(a, r, a.theme.card2, 6.0f);
-        text(a, hwv[i].label, R(r.left + 10.0f, r.top + 4.0f, r.right - 10.0f, r.top + 22.0f),
+        text(a, hwv[i].label, R(r.left + 10.0f, r.top + 4.0f, r.right - 10.0f, r.top + 18.0f),
              a.theme.text3, a.gfx.fSmall);
-        text(a, hwv[i].value, R(r.left + 10.0f, r.top + 20.0f, r.right - 10.0f, r.top + 40.0f),
+        text(a, hwv[i].value, R(r.left + 10.0f, r.top + 18.0f, r.right - 10.0f, r.top + 36.0f),
              a.theme.text, a.gfx.fBody);
-        text(a, hwv[i].src, R(r.left + 10.0f, r.top + 38.0f, r.right - 10.0f, r.top + 50.0f),
+        text(a, hwv[i].src, R(r.left + 10.0f, r.top + 36.0f, r.right - 10.0f, r.top + 50.0f),
              a.theme.text3, a.gfx.fSmall);
     }
     if (a.hwReady && a.hw.detail[0]) {
-        text(a, u8(a.hw.detail), R(hw.left + 18.0f, hw.bottom - 22.0f, hw.right - 18.0f, hw.bottom - 6.0f),
+        text(a, elide(u8(a.hw.detail), 110),
+             R(hw.left + 18.0f, hw.top + 164.0f, hw.right - 18.0f, hw.top + 180.0f),
              a.theme.text3, a.gfx.fSmall);
     }
 
     /* 最近活动 */
-    y += 156.0f + 14.0f;
+    y += 188.0f + 14.0f;
     float listBottom = l.h - PAD;
     if (listBottom - y < 44.0f) return;
     D2D1_RECT_F hist = R(l.contentL, y, l.contentR, listBottom);
@@ -768,6 +769,8 @@ void ui_draw(App &a) {
     a.hits.clear();
     Layout l = make_layout(a);
     a.gfx.begin();
+    /* 每帧清空整个表面，避免窗口被遮挡/失焦后 DWM 复用旧表面产生残影。 */
+    a.gfx.rt->Clear(a.theme.bg1);
     fill_rect(a, R(0, 0, l.w, l.h), a.theme.bg1);
     draw_sidebar(a, l);
     draw_header(a, l);

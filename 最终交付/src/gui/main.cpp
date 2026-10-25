@@ -165,10 +165,16 @@ void Gfx::begin() {
 void Gfx::end() {
     if (!rt) return;
     HRESULT hr = rt->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET) {
+    if (FAILED(hr)) {
+        /* 设备丢失、窗口被遮挡/最小化、GPU 切换都可能让 EndDraw 失败。
+         * 只处理 D2DERR_RECREATE_TARGET 会留下坏表面，表现为残影/花屏；
+         * 这里统一释放并重建，下一帧从 Clear 开始完整重绘。 */
         if (brush) { brush->Release(); brush = nullptr; }
         if (rt) { rt->Release(); rt = nullptr; }
-        if (g_app.hwnd) create_target(*this, g_app.hwnd);
+        if (g_app.hwnd) {
+            create_target(*this, g_app.hwnd);
+            InvalidateRect(g_app.hwnd, NULL, FALSE);
+        }
     }
 }
 
@@ -200,33 +206,11 @@ void update_backdrop(bool dark) {
     COLORREF border = dark ? RGB(48, 48, 48) : RGB(224, 224, 224);
     DwmSetWindowAttribute(g_app.hwnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
 
-    /* Windows 11: Mica；Windows 10: Acrylic（未文档化，失败则静默回退） */
-    typedef struct { int AccentState; int AccentFlags; int GradientColor; int AnimationId; } ACCENT_POLICY;
-    typedef struct { int Attrib; PVOID pvData; SIZE_T cbData; } WCADATA;
-    typedef BOOL (WINAPI *PFN_SETWCA)(HWND, const WCADATA *);
-    static PFN_SETWCA set_wca = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        HMODULE u32 = GetModuleHandleW(L"user32.dll");
-        if (u32) set_wca = (PFN_SETWCA)GetProcAddress(u32, "SetWindowCompositionAttribute");
-    }
-
-    MARGINS margins = {-1, -1, -1, -1};
-    DwmExtendFrameIntoClientArea(g_app.hwnd, &margins);
-
-    if (set_wca) {
-        ACCENT_POLICY accent;
-        memset(&accent, 0, sizeof(accent));
-        accent.AccentState = 4; /* ACCENT_ENABLE_ACRYLICBLURBEHIND */
-        accent.AccentFlags = 2;
-        accent.GradientColor = dark ? 0xCC1A1A1A : 0xCCF4F4F4;
-        WCADATA data;
-        data.Attrib = 19; /* WCA_ACCENT_POLICY */
-        data.pvData = &accent;
-        data.cbData = sizeof(accent);
-        set_wca(g_app.hwnd, &data);
-    }
+    /* 纯色不透明窗口：不使用 Mica/Acrylic/透明客户区。
+     * 透明合成在窗口被遮挡、失焦或切换 GPU 时容易与 D2D 表面产生残影；
+     * 极简黑白 UI 不需要这些效果。 */
+    int backdrop = 1; /* DWMSBT_NONE */
+    DwmSetWindowAttribute(g_app.hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
 
     /* 让标准标题栏跟随深浅色 */
     SetWindowPos(g_app.hwnd, NULL, 0, 0, 0, 0,
@@ -469,12 +453,21 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
 
+        case WM_ACTIVATE:
+        case WM_SHOWWINDOW:
+        case WM_DISPLAYCHANGE:
+            /* 失焦/恢复显示/显示设置变化时强制整窗重绘，避免 DWM 复用旧表面。 */
+            InvalidateRect(hwnd, NULL, FALSE);
+            return 0;
+
         case WM_SETTINGCHANGE:
             if (g_app.themeMode == ThemeMode::System) apply_theme(false);
+            InvalidateRect(hwnd, NULL, FALSE);
             return 0;
 
         case WM_DWMCOLORIZATIONCOLORCHANGED:
             if (g_app.themeMode == ThemeMode::System) apply_theme(false);
+            InvalidateRect(hwnd, NULL, FALSE);
             return 0;
 
         case WM_APP_SCAN_TICK:
