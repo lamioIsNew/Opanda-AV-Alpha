@@ -8,6 +8,7 @@
  *   · 原生 DWM 圆角在 main.cpp 的 update_backdrop() 中设置。
  */
 #include "app.h"
+#include "qtn_crypto.h"
 
 #include <d2d1helper.h>
 #include <shellapi.h>
@@ -60,6 +61,8 @@ enum : int {
     ID_DRV_REFRESH,
     ID_MAX_MINUS,
     ID_MAX_PLUS,
+    ID_KEY_TPM,
+    ID_KEY_SGX,
 
     ID_RESULT_ROW = 20000,
     ID_QUAR_ROW = 30000,
@@ -245,7 +248,7 @@ static const wchar_t *page_sub(Page p) {
     switch (p) {
     case Page::Overview:   return L"设备安全状态、硬件环境与最近活动";
     case Page::Protection: return L"手动扫描、结果处置与威胁隔离";
-    case Page::Quarantine: return L"隔离文件使用 QTN1 轻量加密存储";
+    case Page::Quarantine: return L"隔离文件使用 AES-256-GCM + TPM/SGX 密钥存储";
     case Page::History:    return L"扫描与处置的历史记录";
     case Page::Settings:   return L"外观、扫描、内核执行端与数据";
     default:               return L"";
@@ -594,7 +597,7 @@ static void draw_quarantine(App &a, const Layout &l) {
         draw_empty(a, list, L"隔离区为空", L"在扫描结果中选中疑似/高危文件，点击“隔离选中”");
     }
 
-    text(a, L"QTN1 轻量加密（XOR 0x5A）· 恢复时自动解密 · 旧明文 .qtn 仍可恢复",
+    text(a, L"AES-256-GCM · 默认 TPM 2.0 / SGX 实验 · 旧 QTN1 兼容 · 恢复时自动解密",
          R(l.contentL, l.h - 54.0f, l.contentR, l.h - 22.0f), a.theme.text3, a.gfx.fSmall,
          DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 }
@@ -659,7 +662,7 @@ static void draw_settings(App &a, const Layout &l) {
     float inner = l.contentW - 36.0f;
 
     /* 外观 */
-    D2D1_RECT_F c1 = R(l.contentL, y, l.contentR, y + 116.0f);
+    D2D1_RECT_F c1 = R(l.contentL, y, l.contentR, y + 112.0f);
     card(a, c1);
     text(a, L"外观", R(c1.left + 18.0f, c1.top + 10.0f, c1.right - 18.0f, c1.top + 34.0f),
          a.theme.text, a.gfx.fH3);
@@ -676,7 +679,7 @@ static void draw_settings(App &a, const Layout &l) {
 
     /* 扫描 */
     y = c1.bottom + 12.0f;
-    D2D1_RECT_F c2 = R(l.contentL, y, l.contentR, y + 116.0f);
+    D2D1_RECT_F c2 = R(l.contentL, y, l.contentR, y + 150.0f);
     card(a, c2);
     text(a, L"扫描", R(c2.left + 18.0f, c2.top + 10.0f, c2.right - 18.0f, c2.top + 34.0f),
          a.theme.text, a.gfx.fH3);
@@ -694,9 +697,25 @@ static void draw_settings(App &a, const Layout &l) {
     button(a, ID_OPEN_DATA, R(c2.left + 394.0f, c2.top + 76.0f, c2.left + 510.0f, c2.top + 106.0f),
            L"打开数据目录", false, true);
 
+    /* 隔离密钥后端：TPM 默认；SGX 可选、默认关闭 */
+    settings_label(a, c2.left + 18.0f, c2.top + 108.0f, inner, L"隔离密钥");
+    button(a, ID_KEY_TPM, R(c2.left + 196.0f, c2.top + 108.0f, c2.left + 300.0f, c2.top + 138.0f),
+           L"TPM 2.0", qtn_get_key_mode() == 0, true);
+    bool sgx_ok = qtn_sgx_available();
+    button(a, ID_KEY_SGX, R(c2.left + 308.0f, c2.top + 108.0f, c2.left + 408.0f, c2.top + 138.0f),
+           L"SGX（实验）", qtn_get_key_mode() == 1, sgx_ok);
+    {
+        std::wstring st;
+        if (sgx_ok) st = L"SGX 可用（实验，默认关闭）";
+        else if (qtn_sgx_cpu_support()) st = L"CPU 支持 SGX，但 enclave 后端未编译/未加载";
+        else st = L"CPU 不支持 SGX（CPUID.7:EBX[2]=0）";
+        text(a, st, R(c2.left + 420.0f, c2.top + 108.0f, c2.right - 18.0f, c2.top + 138.0f),
+             a.theme.text3, a.gfx.fSmall, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+
     /* 内核执行端 */
     y = c2.bottom + 12.0f;
-    D2D1_RECT_F c3 = R(l.contentL, y, l.contentR, y + 104.0f);
+    D2D1_RECT_F c3 = R(l.contentL, y, l.contentR, y + 96.0f);
     card(a, c3);
     text(a, L"内核执行端（HIPS）", R(c3.left + 18.0f, c3.top + 10.0f, c3.right - 120.0f, c3.top + 34.0f),
          a.theme.text, a.gfx.fH3);
@@ -711,7 +730,7 @@ static void draw_settings(App &a, const Layout &l) {
 
     /* 关于 */
     y = c3.bottom + 12.0f;
-    D2D1_RECT_F c4 = R(l.contentL, y, l.contentR, y + 128.0f);
+    D2D1_RECT_F c4 = R(l.contentL, y, l.contentR, y + 116.0f);
     card(a, c4);
     text(a, L"关于", R(c4.left + 18.0f, c4.top + 10.0f, c4.right - 18.0f, c4.top + 34.0f),
          a.theme.text, a.gfx.fH3);
@@ -880,6 +899,22 @@ void ui_on_click(App &a, int id, float x, float y) {
     case ID_MAX_PLUS:
         a.settings.maxMb = std::min(4096, a.settings.maxMb + 16);
         scanner_save_settings();
+        break;
+    case ID_KEY_TPM:
+        if (qtn_set_key_mode(0)) {
+            a.settings.keyMode = 0;
+            scanner_save_settings();
+            a.show_toast(L"隔离密钥后端：TPM 2.0");
+        }
+        break;
+    case ID_KEY_SGX:
+        if (qtn_sgx_available() && qtn_set_key_mode(1)) {
+            a.settings.keyMode = 1;
+            scanner_save_settings();
+            a.show_toast(L"隔离密钥后端：SGX（实验）");
+        } else {
+            a.show_toast(L"SGX 不可用：CPU 不支持或 enclave 后端未加载");
+        }
         break;
     default:
         break;

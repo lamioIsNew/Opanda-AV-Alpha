@@ -94,13 +94,13 @@ MalwareScanner_Release/
 | 缺少 `scanner.dll` | 启动时明确提示，不静默失败 |
 | MSVC x64 构建 | `scanner.dll` / `ScannerUI.exe` / `HipsDriver.sys` / `pe_vm_msvc.exe` 均编译通过 |
 | 并行扫描基准（良性 System32，500 文件 / 174.5 MB） | 1 线程 7.14 s → 16 线程 1.07 s（约 6.7x），高危/疑似/正常计数一致 |
-| 隔离文件 | QTN1 头 + XOR 0x5A；旧明文 `.qtn` 兼容 |
+| 隔离文件 | QTNA：AES-256-GCM + TPM 2.0 封装密钥；SGX 可选默认关闭；旧 QTN1 兼容 |
 
 ## 5. 安全边界（重要）
 
 - **静态扫描不等于沙箱行为分析**；不执行、不调试、不注入样本。
 - 加壳文件显示 `[PACKED]`，不直接判恶意；`pe_vm` 不在 DLL 中运行。
-- 隔离区是**用户主动操作**：文件被移动到 `quarantine/`，使用 QTN1 轻量加密（XOR 0x5A）；索引为 `quarantine/index.tsv`。XOR 只是混淆，不是密码学加密；敏感环境请配合 BitLocker/EFS。
+- 隔离区是**用户主动操作**：文件被移动到 `quarantine/`，使用 AES-256-GCM 加密；默认用 TPM 2.0 封装每个文件的随机数据密钥，私钥不出 TPM。SGX 后端为实验选项、默认关闭；当前 CPU 不支持 SGX（CPUID.7:EBX[2]=0），因此 UI 中 SGX 按钮不可用。旧 QTN1（XOR）文件仍可恢复。
 - GUI 不安装驱动、不注册服务、不常驻监控；实时拦截、自保护未启用。
 - `driver/` 提供可选的 HIPS 内核执行端源码与测试签名脚本，**只允许在 VM + 测试签名 + 快照**中加载；生产分发需要 WHQL/attestation 签名。
 - 驱动能力边界：普通进程可结束，PPL/受保护进程受系统限制；被独占打开的文件可能只能返回共享冲突；不提供任意内核读写。

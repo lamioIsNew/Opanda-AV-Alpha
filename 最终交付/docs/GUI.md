@@ -64,23 +64,31 @@ bin/
   config/settings.ini        主题、动画、最大文件大小等
   logs/history.tsv           扫描历史（UTF-8，制表符分隔）
   quarantine/index.tsv       隔离索引
-  quarantine/<时间>_<文件名>.qtn   隔离文件（QTN1 轻量加密）
+  quarantine/<时间>_<文件名>.qtn   隔离文件（AES-256-GCM，TPM/SGX 封装密钥）
 ```
 
-## 6. 隔离文件格式（任务 5）
+## 6. 隔离文件格式
+
+新格式 `QTNA`：
 
 ```text
-0..3    "QTN1"
-4..7    version = 1
-8..11   flags   = 1 (XOR 0x5A)
-12..19  original_size (uint64)
-20..31  reserved (0)
-32..    原始文件逐字节 XOR 0x5A
+0..3    "QTNA"
+4..7    version = 2
+8..11   flags: bit0=AES-256-GCM, bit1=TPM-RSA-OAEP, bit2=SGX-sealed
+12..23  nonce (12)
+24..39  GCM tag (16)
+40..47  original_size (uint64)
+48..51  wrapped_len
+52..55  reserved
+56..    wrapped key (TPM RSA-2048 密文，或 SGX sealed blob)
+之后     AES-256-GCM 密文
 ```
 
-- 新隔离文件写入前加密，恢复时自动解密；
-- 旧版明文 `.qtn` 仍可恢复（按魔数自动识别）；
-- XOR 只是**轻量混淆**，不是密码学加密；敏感环境请配合 BitLocker/EFS。
+- 默认 TPM 2.0：每个文件随机生成 AES-256 数据密钥，用 TPM 内持久化 RSA-2048 公钥做 RSA-OAEP(SHA-256) 封装；私钥不出 TPM。
+- SGX 可选、**默认关闭**：只有 `CPUID.7:EBX[2]=1`、构建时定义 `OPANDA_WITH_SGX`、且存在 `qtn_sgx_enclave.dll` 导出 `QtnSgxSeal/QtnSgxUnseal` 时才可用。
+- 旧 `QTN1`（XOR 0x5A）仍可恢复；已有文件按文件头自动选择 TPM/SGX 解密。
+- TPM 键名 `OpandaQtnKey`；TPM 被清除或键被删除后，已有隔离文件不可恢复。
+- 单文件上限 512 MB。
 
 ## 7. 构建
 

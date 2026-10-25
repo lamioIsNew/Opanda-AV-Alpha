@@ -76,6 +76,7 @@ struct Settings {
     int animations = 1;
     int autoQuarantine = 0;
     int minimizeToTray = 0;
+    int keyMode = 0;        /* 0=TPM 2.0（默认） 1=SGX（实验） */
 };
 
 struct Hit {

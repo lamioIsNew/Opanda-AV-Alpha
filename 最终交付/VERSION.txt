@@ -23,7 +23,7 @@
 本版变更：
   · GUI 重写为 5 页极简布局，仅黑/白/灰，DWM 原生圆角；
   · scanner.dll 新增 scanner_get_hardware_info（SGX / PT / TPM 2.0 / Hypervisor）；
-  · 隔离文件改为 QTN1 头 + XOR 0x5A，兼容旧明文 .qtn；
+  · 隔离文件改为 QTNA：AES-256-GCM + TPM 2.0 封装密钥；SGX 可选、默认关闭；旧 QTN1 兼容；
   · 新增 HIPS 驱动源码、INF、SYSTEM-only 设备 ACL、强杀/强删 IOCTL；
   · pe_vm.c 修复 JMP [IAT] 与 CALL [IAT] 的栈处理差异；
   · 扫描并行化：DLL 读共享锁 + 线程局部结果，GUI 最多 16 个 worker；
@@ -45,7 +45,7 @@
 
 说明：
   · 静态扫描绝不执行样本；pe_vm 在 DLL 模式强制关闭。
-  · 隔离 XOR 只是轻量混淆，不是密码学加密。
+  · 隔离使用 AEAD（AES-256-GCM）；TPM 键名 OpandaQtnKey；SGX 后端未启用（当前 CPU SGX=0）。
   · 驱动只允许在 VM + 测试签名 + 快照中加载，绝不在宿主机加载。
   · 当前不含服务/实时监控；驱动是独立测试组件，GUI 不加载。
   · 正式分发前请对 EXE/DLL/驱动做 Authenticode/WHQL 签名。

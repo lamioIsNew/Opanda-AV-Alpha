@@ -1,5 +1,6 @@
 /* scan.cpp -- DLL 加载、扫描线程、历史/隔离区/设置/驱动状态 */
 #include "app.h"
+#include "qtn_crypto.h"
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -242,6 +243,13 @@ void scanner_load_settings() {
     g_app.settings.animations = (int)GetPrivateProfileIntW(L"ui", L"animations", 1, ini.c_str());
     g_app.settings.autoQuarantine = (int)GetPrivateProfileIntW(L"scan", L"auto_quarantine", 0, ini.c_str());
     g_app.settings.minimizeToTray = (int)GetPrivateProfileIntW(L"ui", L"minimize_to_tray", 0, ini.c_str());
+    g_app.settings.keyMode = (int)GetPrivateProfileIntW(L"crypto", L"key_mode", 0, ini.c_str());
+    if (g_app.settings.keyMode != 0 && g_app.settings.keyMode != 1) g_app.settings.keyMode = 0;
+    if (!qtn_set_key_mode(g_app.settings.keyMode)) {
+        /* SGX 在无 SGX 的机器/未编译 enclave 时不可用：安全回退 TPM。 */
+        g_app.settings.keyMode = 0;
+        qtn_set_key_mode(0);
+    }
     if (g_app.settings.theme < 0 || g_app.settings.theme > 2) g_app.settings.theme = 0;
     if (g_app.settings.maxMb < 16) g_app.settings.maxMb = 16;
     if (g_app.settings.maxMb > 4096) g_app.settings.maxMb = 4096;
@@ -266,6 +274,8 @@ void scanner_save_settings() {
     WritePrivateProfileStringW(L"scan", L"auto_quarantine", b, ini.c_str());
     swprintf(b, 32, L"%d", g_app.settings.minimizeToTray);
     WritePrivateProfileStringW(L"ui", L"minimize_to_tray", b, ini.c_str());
+    swprintf(b, 32, L"%d", g_app.settings.keyMode);
+    WritePrivateProfileStringW(L"crypto", L"key_mode", b, ini.c_str());
 }
 
 void open_data_dir() {
@@ -470,197 +480,6 @@ void scanner_save_quarantine() {
         out += '\n';
     }
     write_utf8(quarantine_index(), out, false);
-}
-
-/* ---------------- 隔离区 QTN1 轻量加密（任务 5） ----------------
- * 格式（32 字节头，全部小端）：
- *   0..3   "QTN1"
- *   4..7   version = 1
- *   8..11  flags   = 1 (XOR 0x5A)
- *   12..19 original_size (uint64)
- *   20..31 reserved (0)
- * 载荷：原始文件逐字节 XOR 0x5A。
- *
- * 注意：这是隔离存储的轻量混淆，不是密码学加密；目的是避免 .qtn
- * 被普通文本/十六进制工具直接读出，不能替代 BitLocker/EFS。
- */
-static const unsigned char kQtnMagic[4] = {'Q', 'T', 'N', '1'};
-static const unsigned char kQtnKey = 0x5A;
-static const DWORD kQtnHeader = 32;
-
-static bool qtn_read_exact(HANDLE h, void *buf, DWORD n) {
-    unsigned char *p = (unsigned char *)buf;
-    while (n) {
-        DWORD got = 0;
-        if (!ReadFile(h, p, n, &got, NULL) || got == 0) return false;
-        p += got;
-        n -= got;
-    }
-    return true;
-}
-
-static bool qtn_write_exact(HANDLE h, const void *buf, DWORD n) {
-    const unsigned char *p = (const unsigned char *)buf;
-    while (n) {
-        DWORD put = 0;
-        if (!WriteFile(h, p, n, &put, NULL) || put == 0) return false;
-        p += put;
-        n -= put;
-    }
-    return true;
-}
-
-static bool qtn_is_encrypted(const std::wstring &path) {
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h == INVALID_HANDLE_VALUE) return false;
-    unsigned char m[4] = {0};
-    DWORD got = 0;
-    BOOL ok = ReadFile(h, m, 4, &got, NULL);
-    CloseHandle(h);
-    return ok && got == 4 && memcmp(m, kQtnMagic, 4) == 0;
-}
-
-static bool qtn_encrypt_to(const std::wstring &src, const std::wstring &dst, std::wstring &err) {
-    HANDLE in = INVALID_HANDLE_VALUE, out = INVALID_HANDLE_VALUE;
-    LARGE_INTEGER li;
-    bool ok = false;
-    unsigned char hdr[kQtnHeader] = {0};
-    unsigned int ver = 1, flags = 1;
-    unsigned long long total = 0;
-
-    in = CreateFileW(src.c_str(), GENERIC_READ,
-                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                     NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (in == INVALID_HANDLE_VALUE) { err = error_text(GetLastError()); return false; }
-    if (!GetFileSizeEx(in, &li)) { err = error_text(GetLastError()); goto done; }
-    total = (unsigned long long)li.QuadPart;
-
-    out = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, NULL,
-                      CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (out == INVALID_HANDLE_VALUE) { err = error_text(GetLastError()); goto done; }
-
-    memcpy(hdr, kQtnMagic, 4);
-    memcpy(hdr + 4, &ver, 4);
-    memcpy(hdr + 8, &flags, 4);
-    memcpy(hdr + 12, &total, 8);
-    if (!qtn_write_exact(out, hdr, kQtnHeader)) { err = error_text(GetLastError()); goto done; }
-
-    {
-        std::vector<unsigned char> buf(64 * 1024);
-        unsigned long long left = total;
-        while (left) {
-            DWORD want = (DWORD)std::min<unsigned long long>(left, buf.size());
-            DWORD got = 0;
-            if (!ReadFile(in, buf.data(), want, &got, NULL) || got == 0) {
-                err = error_text(GetLastError());
-                goto done;
-            }
-            for (DWORD i = 0; i < got; i++) buf[i] ^= kQtnKey;
-            if (!qtn_write_exact(out, buf.data(), got)) { err = error_text(GetLastError()); goto done; }
-            left -= got;
-        }
-    }
-    FlushFileBuffers(out);
-    ok = true;
-
-done:
-    if (out != INVALID_HANDLE_VALUE) CloseHandle(out);
-    if (in != INVALID_HANDLE_VALUE) CloseHandle(in);
-    if (!ok) DeleteFileW(dst.c_str());
-    return ok;
-}
-
-static bool qtn_decrypt_to(const std::wstring &src, const std::wstring &dst, std::wstring &err) {
-    HANDLE in = INVALID_HANDLE_VALUE, out = INVALID_HANDLE_VALUE;
-    bool ok = false;
-    unsigned char hdr[kQtnHeader] = {0};
-    unsigned int ver = 0, flags = 0;
-    unsigned long long total = 0, written = 0;
-
-    in = CreateFileW(src.c_str(), GENERIC_READ,
-                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                     NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (in == INVALID_HANDLE_VALUE) { err = error_text(GetLastError()); return false; }
-    if (!qtn_read_exact(in, hdr, kQtnHeader)) { err = L"隔离文件头不完整"; goto done; }
-    if (memcmp(hdr, kQtnMagic, 4) != 0) { err = L"不是 QTN1 隔离文件"; goto done; }
-    memcpy(&ver, hdr + 4, 4);
-    memcpy(&flags, hdr + 8, 4);
-    memcpy(&total, hdr + 12, 8);
-    if (ver != 1) { err = L"不支持的隔离格式版本"; goto done; }
-    if (flags != 1) { err = L"不支持的隔离加密标志"; goto done; }
-
-    out = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, NULL,
-                      CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (out == INVALID_HANDLE_VALUE) { err = error_text(GetLastError()); goto done; }
-
-    {
-        std::vector<unsigned char> buf(64 * 1024);
-        while (written < total) {
-            DWORD want = (DWORD)std::min<unsigned long long>(total - written, buf.size());
-            DWORD got = 0;
-            if (!qtn_read_exact(in, buf.data(), want)) { err = L"隔离文件载荷被截断"; goto done; }
-            got = want;
-            for (DWORD i = 0; i < got; i++) buf[i] ^= kQtnKey;
-            if (!qtn_write_exact(out, buf.data(), got)) { err = error_text(GetLastError()); goto done; }
-            written += got;
-        }
-    }
-    FlushFileBuffers(out);
-    ok = true;
-
-done:
-    if (out != INVALID_HANDLE_VALUE) CloseHandle(out);
-    if (in != INVALID_HANDLE_VALUE) CloseHandle(in);
-    if (!ok) DeleteFileW(dst.c_str());
-    return ok;
-}
-
-static bool qtn_quarantine_file(const std::wstring &src, const std::wstring &stored, std::wstring &err) {
-    std::wstring tmp = stored + L".tmp";
-    DeleteFileW(tmp.c_str());
-    if (!qtn_encrypt_to(src, tmp, err)) return false;
-    if (!MoveFileExW(tmp.c_str(), stored.c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        err = error_text(GetLastError());
-        DeleteFileW(tmp.c_str());
-        DeleteFileW(stored.c_str());
-        return false;
-    }
-    if (!DeleteFileW(src.c_str())) {
-        DWORD e = GetLastError();
-        if (e == ERROR_ACCESS_DENIED) {
-            SetFileAttributesW(src.c_str(), FILE_ATTRIBUTE_NORMAL);
-            if (DeleteFileW(src.c_str())) return true;
-            e = GetLastError();
-        }
-        err = error_text(e);
-        DeleteFileW(stored.c_str());
-        return false;
-    }
-    return true;
-}
-
-static bool qtn_restore_file(const std::wstring &stored, const std::wstring &original, std::wstring &err) {
-    if (!qtn_is_encrypted(stored)) {
-        if (!MoveFileExW(stored.c_str(), original.c_str(), MOVEFILE_COPY_ALLOWED)) {
-            err = error_text(GetLastError());
-            return false;
-        }
-        return true;
-    }
-    std::wstring tmp = original + L".qtn_restore";
-    DeleteFileW(tmp.c_str());
-    if (!qtn_decrypt_to(stored, tmp, err)) return false;
-    if (!MoveFileExW(tmp.c_str(), original.c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        err = error_text(GetLastError());
-        DeleteFileW(tmp.c_str());
-        return false;
-    }
-    DeleteFileW(stored.c_str());
-    return true;
 }
 
 void scanner_quarantine_selected() {

@@ -25,7 +25,7 @@ $res = Join-Path $Obj 'ScannerUI.res'
 & rc.exe /nologo /I"$Gui" /fo"$res" (Join-Path $Gui 'ScannerUI.rc')
 if ($LASTEXITCODE -ne 0) { throw "rc.exe failed ($LASTEXITCODE)" }
 
-$srcs = @('main.cpp', 'scan.cpp', 'ui.cpp')
+$srcs = @('main.cpp', 'scan.cpp', 'ui.cpp', 'qtn_crypto.cpp')
 $objs = @()
 foreach ($s in $srcs) {
     $in = Join-Path $Gui $s
@@ -42,7 +42,7 @@ Write-Host '[LINK] ScannerUI.exe'
 & link.exe /nologo /SUBSYSTEM:WINDOWS /MACHINE:X64 /ENTRY:wWinMainCRTStartup `
     /OUT:"$Bin\ScannerUI.exe" $objs $res `
     d2d1.lib dwrite.lib dwmapi.lib ole32.lib uuid.lib shell32.lib shlwapi.lib `
-    comctl32.lib comdlg32.lib user32.lib gdi32.lib advapi32.lib
+    comctl32.lib comdlg32.lib user32.lib gdi32.lib advapi32.lib bcrypt.lib ncrypt.lib
 if ($LASTEXITCODE -ne 0) { throw "link failed ($LASTEXITCODE)" }
 
 $h = (Get-FileHash -LiteralPath (Join-Path $Bin 'ScannerUI.exe') -Algorithm SHA256).Hash
