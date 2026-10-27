@@ -32,6 +32,10 @@
 
 App g_app;
 
+/* 窗口图标：从 imageres.dll 提取的 UAC 盾牌（-78），失败时回退系统默认。 */
+static HICON g_appIconLarge = nullptr;
+static HICON g_appIconSmall = nullptr;
+
 static UINT system_dpi() {
     HMODULE u32 = GetModuleHandleW(L"user32.dll");
     typedef UINT (WINAPI *PFN_GETSYSTEMDPI)(void);
@@ -533,10 +537,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
     wc.lpfnWndProc = WndProc;
     wc.hInstance = inst;
     wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
-    wc.hIcon = LoadIconW(NULL, MAKEINTRESOURCEW(32518));
-    wc.hIconSm = wc.hIcon;
+    g_appIconLarge = ui_load_system_icon(-78, 32, 32);
+    g_appIconSmall = ui_load_system_icon(-78, 16, 16);
+    wc.hIcon = g_appIconLarge ? g_appIconLarge : LoadIconW(NULL, MAKEINTRESOURCEW(32518));
+    wc.hIconSm = g_appIconSmall ? g_appIconSmall : wc.hIcon;
     wc.lpszClassName = L"MalwareScannerUI";
     if (!RegisterClassExW(&wc)) {
+        if (g_appIconSmall) DestroyIcon(g_appIconSmall);
+        if (g_appIconLarge) DestroyIcon(g_appIconLarge);
+        g_appIconSmall = g_appIconLarge = nullptr;
         scanner_runtime_shutdown();
         CoUninitialize();
         return 1;
@@ -558,11 +567,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
                                 WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
                                 x, y, w, h, NULL, NULL, inst, NULL);
     if (!hwnd) {
+        if (g_appIconSmall) DestroyIcon(g_appIconSmall);
+        if (g_appIconLarge) DestroyIcon(g_appIconLarge);
+        g_appIconSmall = g_appIconLarge = nullptr;
         scanner_runtime_shutdown();
         CoUninitialize();
         return 1;
     }
     g_app.hwnd = hwnd;
+    SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)wc.hIcon);
+    SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)wc.hIconSm);
     apply_theme(true);
     scanner_refresh_driver();
     ShowWindow(hwnd, SW_SHOW);
@@ -603,6 +617,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    if (g_appIconSmall) DestroyIcon(g_appIconSmall);
+    if (g_appIconLarge) DestroyIcon(g_appIconLarge);
+    g_appIconSmall = g_appIconLarge = nullptr;
     CoUninitialize();
     return 0;
 }

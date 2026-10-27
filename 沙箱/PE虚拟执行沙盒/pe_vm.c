@@ -2685,12 +2685,35 @@ static int stub_entry_was_call(void) {
     return 0;                                   /* jmp / ret / jcc / loop ... */
 }
 
+/* 判断一个地址能否作为 API 返回后的续跑点：必须是可执行页，或者是退栈哨兵。 */
+static int api_resume_ok(u32 addr) {
+    u32 pg;
+    if (addr == EXIT_MAGIC) return 1;
+    if (addr == 0) return 0;
+    pg = addr >> PG_SHIFT;
+    if (pg >= PG_COUNT || !g_pg[pg].p) return 0;
+    return (g_pg[pg].prot & P_X) != 0;
+}
+
+/* api_dispatch —— 假 API 桩的统一调度。
+ *
+ * 进入本函数时 EIP 指向桩地址，ESP 的布局分两种：
+ *   CALL [IAT]  ：call 指令已经压入返回地址 -> [ESP] = 返回地址，参数在 [ESP+4 ...]
+ *   JMP  [IAT]  ：尾调用，本函数（被 jmp 掉的那个）的返回地址就是调用方压的
+ *                 -> 对 API 而言 [ESP] 同样是返回地址，参数在 [ESP+4 ...]
+ * 两种情况下被调 API 的 "ret n" 都会弹掉 1 个返回地址和 n 个 stdcall 参数，
+ * 所以栈回卷量完全一致：ESP += 4 + 4*nargs。
+ * 之前 JMP 分支只把 EIP 设成 [ESP] 而不回卷栈，返回地址会永久留在栈上，
+ * 后续某条 ret 就会把参数（典型是 0x00000002）弹进 EIP —— 即 0x2 越界。
+ * nargs < 0（表里写 -1）表示 cdecl：参数由调用方清理，这里只弹返回地址。
+ */
 static int api_dispatch(void) {
     imp_t* im = stub_lookup(EIP);
     if (!im) return 0;
     const char* name = im->name;
     int from_call = stub_entry_was_call();
-    u32 ret = peek32(ESP);
+    u32 ret = peek32(ESP);              /* 栈顶：返回地址（CALL/JMP 语义相同） */
+    u32 esp_in = ESP;                   /* 进入桩时的栈指针，回卷以它为基准 */
 
     if (!_stricmp(name, "_CorExeMain") || !_stricmp(name, "_CorDllMain")) {
         blog("托管", "★.NET 程序集入口 %s：x86 解释器不适用，需按 IL 分析", name);
@@ -2707,36 +2730,39 @@ static int api_dispatch(void) {
     else { blog("API未实现", "%s!%s -> 返回 0（参数个数未知，按 0 处理；此调用之后栈可能错位）", im->dll, name); EAX = 0; nargs = 0; unk_api_note(name); }
     if (getenv("PEVM_API_LOG"))
         fprintf(stderr, "[API] %s via %s -> EAX=0x%X ret=0x%X ESP=0x%X nargs=%d\n",
-                name, from_call ? "CALL" : "JMP", (unsigned)EAX, (unsigned)ret, (unsigned)ESP, nargs);
+                name, from_call ? "CALL" : "JMP", (unsigned)EAX, (unsigned)ret, (unsigned)esp_in, nargs);
 
-    if (from_call) {
-        EIP = ret;
-        ESP += 4;                                /* CALL：弹掉本次 call 压入的返回地址 */
-        if (nargs > 0) ESP += 4 * (u32)nargs;     /* stdcall：被调方清理参数 */
-        /* nargs == 0：无参数，只需弹返回地址；nargs < 0（写 -1）为 cdecl：参数由调用方清理，这里一律不动 ESP */
-    } else {
-        /* JMP [IAT] 尾调用：本指令没有压入返回地址。
-         * 任务 4 要求不要 ESP += 4，直接恢复 EIP 到栈顶地址。
-         * 同时也不在这里弹 stdcall 参数，否则会把调用方的返回地址留在栈上，
-         * 后续 ret 就会弹出参数（典型是 0x00000002）。 */
-        EIP = peek32(ESP);
+    /* 续跑地址：正常就是栈顶那个返回地址。 */
+    u32 next = ret;
+
+    /* 防御：JMP 形态里偶尔会由调用方自己 push 参数后再 jmp（无返回地址压栈），
+     * 此时 [ESP] 是普通参数（例如 2），直接当 EIP 用就会跳到 0x00000002。
+     * 只有在主路径明显不可执行、且参数个数已知时才做一次保守修正：
+     * 参数上方那一格才是真正的返回地址；栈回卷量不变（同样吃掉返回地址 + nargs 个参数）。 */
+    if (!api_resume_ok(next) && nargs > 0) {
+        u32 alt = peek32(esp_in + 4u * (u32)nargs);
+        if (api_resume_ok(alt)) {
+            blog("栈修正", "%s!%s 的 [ESP]=0x%08X 不是可执行返回地址，改用参数上方的 0x%08X 续跑",
+                 im->dll, name, (unsigned)next, (unsigned)alt);
+            next = alt;
+        }
     }
 
-    /* jmp [IAT] 这类尾调用：栈顶是我们的返回哨兵 -> 干净收场 */
-    if (EIP == EXIT_MAGIC) {
+    if (next == EXIT_MAGIC) {
         snprintf(g_stop_reason, sizeof(g_stop_reason), "样本在 API 调用后结束（回到返回哨兵）");
         g_halted = 1;
         return 0;
     }
-    /* 返回地址不是可执行内存 -> 说明样本实现在被调用的系统 DLL 里，我们到此为止 */
-    {
-        u32 pg = EIP >> PG_SHIFT;
-        if (pg >= PG_COUNT || !g_pg[pg].p || !(g_pg[pg].prot & P_X)) {
-            snprintf(g_stop_reason, sizeof(g_stop_reason), "API 返回地址 0x%08X 不是可执行内存（样本实现可能在被调用的系统 DLL 内）", EIP);
-            g_halted = 1;
-            return 0;
-        }
+    if (!api_resume_ok(next)) {
+        snprintf(g_stop_reason, sizeof(g_stop_reason), "API 返回地址 0x%08X 不是可执行内存（样本实现可能在被调用的系统 DLL 内）", next);
+        g_halted = 1;
+        return 0;
     }
+
+    /* 统一栈回卷：弹返回地址（4）；stdcall 再按 nargs 清参数；cdecl（nargs<0）不动参数。 */
+    EIP = next;
+    ESP = esp_in + 4;
+    if (nargs > 0) ESP += 4u * (u32)nargs;
     return 1;
 }
 

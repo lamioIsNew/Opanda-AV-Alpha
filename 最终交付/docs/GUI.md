@@ -69,24 +69,28 @@ bin/
 
 ## 6. 隔离文件格式
 
-新格式 `QTNA`：
+新格式 `QTNA v3`（64 KB 分块流式）：
 
 ```text
 0..3    "QTNA"
-4..7    version = 2
+4..7    version = 3
 8..11   flags: bit0=AES-256-GCM, bit1=TPM-RSA-OAEP, bit2=SGX-sealed
-12..23  nonce (12)
-24..39  GCM tag (16)
+12..19  nonce 盐 (8, 随机)
+20..23  保留 0
+24..39  保留 0（v2 这里是唯一的 GCM tag）
 40..47  original_size (uint64)
 48..51  wrapped_len
-52..55  reserved
+52..55  chunk_size = 65536
 56..    wrapped key (TPM RSA-2048 密文，或 SGX sealed blob)
-之后     AES-256-GCM 密文
+之后    按 64 KB 分块：[密文块][16 B GCM tag] ...
 ```
 
+- 每块 nonce = 盐(8 B) || 块序号(4 B，大端)，块序号单调递增，同一文件内 nonce 永不重复；AAD = 头部 || 封装密钥 || 块序号 || 本块明文长度，可检测重排、截断与篡改。
+- 加解密全程恒定 64 KB 缓冲（256 MB 文件解密实测峰值工作集约 8.8 MB），不再整文件读入内存。
+- 明文 AES 密钥与 CNG 密钥对象放在 `VirtualLock` 锁页内存中，用完 `SecureZeroMemory` 再释放；明文密钥交给 CNG 生成句柄后立即清零。
 - 默认 TPM 2.0：每个文件随机生成 AES-256 数据密钥，用 TPM 内持久化 RSA-2048 公钥做 RSA-OAEP(SHA-256) 封装；私钥不出 TPM。
 - SGX 可选、**默认关闭**：只有 `CPUID.7:EBX[2]=1`、构建时定义 `OPANDA_WITH_SGX`、且存在 `qtn_sgx_enclave.dll` 导出 `QtnSgxSeal/QtnSgxUnseal` 时才可用。
-- 旧 `QTN1`（XOR 0x5A）仍可恢复；已有文件按文件头自动选择 TPM/SGX 解密。
+- 旧 `QTNA v2`（单 nonce 一次性 GCM）与 `QTN1`（XOR 0x5A）只读兼容：v2 必须整段读入才能校验 tag，因此仍受 512 MB 上限约束；新写入一律为 v3。
 - TPM 键名 `OpandaQtnKey`；TPM 被清除或键被删除后，已有隔离文件不可恢复。
 - 单文件上限 512 MB。
 

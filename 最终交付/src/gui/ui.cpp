@@ -974,3 +974,29 @@ void ui_on_key(App &a, WPARAM key) {
         }
     }
 }
+
+/* 从 imageres.dll 提取系统图标（-78 = UAC 盾牌，适合杀软窗口）。
+ * cx<=16 取小图标，否则取大图标；返回的 HICON 由调用方 DestroyIcon。 */
+HICON ui_load_system_icon(int icon_resource_id, int cx, int cy) {
+    (void)cy;
+    wchar_t dir[MAX_PATH] = {0};
+    wchar_t dll[MAX_PATH] = {0};
+    UINT n = GetSystemDirectoryW(dir, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH - 16) return nullptr;
+    lstrcpynW(dll, dir, MAX_PATH);
+    lstrcatW(dll, L"\\imageres.dll");
+
+    HICON hLarge = nullptr;
+    HICON hSmall = nullptr;
+    if (ExtractIconExW(dll, icon_resource_id, &hLarge, &hSmall, 1) == 0)
+        return nullptr;
+
+    HICON hOut = nullptr;
+    if (cx > 16 && hLarge) hOut = hLarge;
+    else if (hSmall) hOut = hSmall;
+    else hOut = hLarge;
+
+    if (hOut != hLarge && hLarge) DestroyIcon(hLarge);
+    if (hOut != hSmall && hSmall) DestroyIcon(hSmall);
+    return hOut;
+}

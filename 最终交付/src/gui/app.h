@@ -235,3 +235,7 @@ void ui_on_click(App &app, int id, float x, float y);
 void ui_on_move(App &app, float x, float y);
 void ui_on_wheel(App &app, float x, float y, int delta);
 void ui_on_key(App &app, WPARAM key);
+
+/* 从 imageres.dll 提取系统图标（cx<=16 取小图标，否则取大图标）。
+ * 返回的 HICON 由调用方负责 DestroyIcon；失败返回 NULL。 */
+HICON ui_load_system_icon(int icon_resource_id, int cx, int cy);
